@@ -1,0 +1,13 @@
+//#line 2 "source\rasterizer\hlsl\cui_gamma_correct_copy.hlsl"
+
+#include "explicit\cui_hlsl.fx"
+//@generate screen
+
+float4 default_ps(screen_output IN) : COLOR
+{
+	float4 color= cui_linear_to_gamma2_tex2D(IN.texcoord);
+	
+	color = cui_tint(color, cui_linear_to_gamma2(k_cui_pixel_shader_tint*IN.color));
+	
+	return color*scale;
+}

@@ -1,0 +1,36 @@
+void calc_specular_mask_no_specular_mask_ps(
+	in float2 texcoord,
+	in float in_specular_mask,
+	out float specular_mask)
+{
+	specular_mask= 1.0f;
+}
+
+void calc_specular_mask_from_diffuse_ps(
+	in float2 texcoord,
+	in float in_specular_mask,
+	out float specular_mask)
+{
+	specular_mask= in_specular_mask;
+}
+
+sampler specular_mask_texture;
+float4 specular_mask_texture_xform;
+
+void calc_specular_mask_mult_texture_ps(
+	in float2 texcoord,
+	in float in_specular_mask,
+	out float specular_mask)
+{
+	float4 material= tex2D(specular_mask_texture, texcoord*specular_mask_texture_xform.xy + specular_mask_texture_xform.zw);
+	specular_mask= in_specular_mask*material.a;
+}
+
+void calc_specular_mask_texture_ps(
+	in float2 texcoord,
+	in float in_specular_mask,
+	out float specular_mask)
+{
+	float4 material= tex2D(specular_mask_texture, texcoord*specular_mask_texture_xform.xy + specular_mask_texture_xform.zw);
+	specular_mask= material.a;
+}
