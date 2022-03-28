@@ -1,6 +1,6 @@
 # HaloReach-Shader-Source
 
-Extracted from the July 7th 2011 tags build of Halo Reach using [Mandrill](https://github.com/ChimpsAtSea/Blam-Creation-Suite#engineering-overview).
+Extracted from the July 19th 2011 tags build of Halo Reach using [Mandrill](https://github.com/ChimpsAtSea/Blam-Creation-Suite#engineering-overview).
 
 The extensions were chosen based on a heuristic that if a file contained `.hlsl` case-insensitively within the first two lines, it was given a .hlsl extension.
 
