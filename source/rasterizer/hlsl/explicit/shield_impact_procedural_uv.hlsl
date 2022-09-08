@@ -7,22 +7,6 @@
 
 #include "shared\render_target.fx"
 
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-	#define VERTEX_SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
-	#define PIXEL_SAMPLER_CONSTANT(name, register_index)
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define VERTEX_SAMPLER_CONSTANT(name, register_index)
-	#define PIXEL_SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
-
 #include "explicit\shield_impact_registers.fx"
 
 // Magic line to compile this for various needed vertex types
@@ -36,18 +20,22 @@
 
 float compute_depth_fade(float2 screen_coords, float depth, float inverse_range)
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return 1;
 #else
 	float4 depth_value;
-	asm 
+#ifdef xenon
+	asm
 	{
 		tfetch2D depth_value, screen_coords, depth_buffer, UnnormalizedTextureCoords = true, MagFilter = point, MinFilter = point, MipFilter = point, AnisoFilter = disabled
 	};
+#elif DX_VERSION == 11
+	depth_value= depth_buffer.Load(int3(screen_coords, 0));
+#endif
 
 	float scene_depth= 1.0f / (depth_constants.z - depth_value.x * depth_constants.y);	// convert to real depth
 	float delta_depth= scene_depth - depth;
-	
+
 	return saturate(delta_depth * inverse_range);
 #endif
 }
@@ -61,7 +49,7 @@ float compute_depth_fade(float2 screen_coords, float depth, float inverse_range)
 
 void default_vs(
 	in vertex_type vertex_in,
-	out float4 position				: POSITION,
+	out float4 position				: SV_Position,
 	out float4 world_space_pos		: TEXCOORD0,
 	out float4 texcoord				: TEXCOORD1)
 {
@@ -70,22 +58,22 @@ void default_vs(
 
 	float3	impact_delta=				vertex_in.position -	impact0_params.xyz;
 	float	impact_distance=			length(impact_delta) /	impact0_params.w;
-	
+
 	float3	world_position=				vertex_in.position.xyz + vertex_in.normal * EXTRUSION_DISTANCE;
 
-#ifdef xenon
-	float noise_value1=			tex2Dlod(shield_impact_noise_texture1, float4(world_position.xy * OSCILLATION_SCALE + OSCILLATION_OFFSET0, 0.0f, 0.0f));
-	float noise_value2=			tex2Dlod(shield_impact_noise_texture2, float4(world_position.yz * OSCILLATION_SCALE + OSCILLATION_OFFSET1, 0.0f, 0.0f));
+#if defined(xenon) || (DX_VERSION == 11)
+	float noise_value1=			sample2Dlod(shield_impact_noise_texture1, world_position.xy * OSCILLATION_SCALE + OSCILLATION_OFFSET0, 0);
+	float noise_value2=			sample2Dlod(shield_impact_noise_texture2, world_position.yz * OSCILLATION_SCALE + OSCILLATION_OFFSET1, 0);
 
 	float noise=				(noise_value1 + noise_value2 - 1.0f) * OSCILLATION_AMPLITUDE;
-		
+
 	world_position		+=		vertex_in.normal * noise;
 #endif
-	
+
 	float3 camera_to_vertex=	world_position - Camera_Position.xyz;
-		
+
 	float cosine_view=		-dot(normalize(camera_to_vertex), vertex_in.normal);
-	world_space_pos=		float4(world_position, cosine_view);	
+	world_space_pos=		float4(world_position, cosine_view);
 
 	float depth=			-dot(camera_to_vertex, Camera_Backward.xyz);
 
@@ -93,15 +81,15 @@ void default_vs(
 	float3 normalized_vector= float3(1, 1, 1);//abs(normalize(vertex_in.position));
 	uv.x= vertex_in.position.y*normalized_vector.x;
 	uv.y= vertex_in.position.z*normalized_vector.x;
-	
+
 	uv.x+= vertex_in.position.x*normalized_vector.y;
 	uv.y+= vertex_in.position.z*normalized_vector.y;
 
 	uv.x+= vertex_in.position.x*normalized_vector.z;
-	uv.y+= vertex_in.position.y*normalized_vector.z;	
+	uv.y+= vertex_in.position.y*normalized_vector.z;
 
 
-	position=				mul(float4(world_position, 1.0f), View_Projection);	
+	position=				mul(float4(world_position, 1.0f), View_Projection);
 	texcoord.xy=			uv.xy;
 	texcoord.z=				depth;
 	texcoord.w=				impact_distance;
@@ -134,17 +122,16 @@ void default_vs(
 #define INVERSE_DEPTH_FADE_RANGE	(depth_constants.w)
 
 
-[maxtempreg(3)] 
+[maxtempreg(3)]
 accum_pixel default_ps(
-	in float2 vpos					: VPOS,
-	in float4 position				: POSITION,
+	SCREEN_POSITION_INPUT(vpos),
 	in float4 world_space_pos		: TEXCOORD0,
 	in float4 texcoord				: TEXCOORD1)
 {
-#ifdef xenon
+#if defined(xenon) || (DX_VERSION == 11)
 	float edge_fade=			world_space_pos.w;
 	float depth=				texcoord.z;
-	
+
 	float depth_fade=			compute_depth_fade(vpos, depth, INVERSE_DEPTH_FADE_RANGE);
 
 	float	edge_linear=		saturate(min(edge_fade * OUTER_SCALE + OUTER_OFFSET, edge_fade * INNER_SCALE + INNER_OFFSET));
@@ -153,21 +140,21 @@ accum_pixel default_ps(
 	float	edge=				edge_quartic * depth_fade;
 	float	edge_plasma=		edge_plasma_linear * depth_fade;
 
-	float	plasma_noise1=		tex2D(shield_impact_noise_texture1, texcoord.xy * PLASMA_TILE_SCALE1 + PLASMA_TILE_OFFSET1);
-	float	plasma_noise2=		tex2D(shield_impact_noise_texture2, texcoord.xy * PLASMA_TILE_SCALE2 - PLASMA_TILE_OFFSET2);		// Do not change the '-' ...   it makes it compile magically (yay for the xbox shader compiler)
+	float	plasma_noise1=		sample2D(shield_impact_noise_texture1, texcoord.xy * PLASMA_TILE_SCALE1 + PLASMA_TILE_OFFSET1);
+	float	plasma_noise2=		sample2D(shield_impact_noise_texture2, texcoord.xy * PLASMA_TILE_SCALE2 - PLASMA_TILE_OFFSET2);		// Do not change the '-' ...   it makes it compile magically (yay for the xbox shader compiler)
 	float	plasma_base=		saturate(1.0f - abs(plasma_noise1 - plasma_noise2));
 	float	plasma_power=		edge_plasma * PLASMA_POWER_SCALE + PLASMA_POWER_OFFSET;
 	float	plasma=				pow(plasma_base, plasma_power);
-	
+
 	float4	hit_color=			impact0_color * saturate(1.0f - texcoord.w);
 
 	float4	final_color=		edge * EDGE_GLOW_COLOR + (PLASMA_EDGE_COLOR * edge_plasma + PLASMA_COLOR + hit_color) * plasma;
-	
+
 	final_color.rgb	*=			g_exposure.r;
 
 #else // pc
 	float4	final_color=		0.0f;
 #endif // xenon
 
-	return	convert_to_render_target(final_color, false, false);	
+	return	convert_to_render_target(final_color, false, false);
 }

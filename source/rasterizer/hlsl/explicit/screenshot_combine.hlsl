@@ -5,6 +5,7 @@
 // non-antialiased (screenshots should never take antialiased pathway)
 //@entry default
 
+#include "hlsl_constant_globals.fx"
 
 #define CALC_BLOOM calc_bloom_screenshot
 float4 calc_bloom_screenshot(in float2 texcoord);
@@ -16,7 +17,8 @@ float4 calc_bloom_screenshot(in float2 texcoord);
 float4 calc_bloom_screenshot(in float2 pixel_space_texcoord)
 {
 	// sample bloom super-smooth bspline!
-	return tex2D_bspline(bloom_sampler, pixel_space_texcoord);
+	// bloom has -2 exp bias, but +5 exp surface. Total +3 exp bias
+	return tex2D_bspline(bloom_sampler, pixel_space_texcoord) * 8;
 
 }
 

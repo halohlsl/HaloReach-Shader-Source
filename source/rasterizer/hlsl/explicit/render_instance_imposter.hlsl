@@ -16,8 +16,8 @@ ctchou
 #include "shared\blend.fx"
 #include "shared\albedo_pass.fx"
 #include "templated\velocity.fx"
-
 #include "shared\render_target.fx"
+#include "explicit\render_instance_imposter_registers.fx"
 
 // rename entry points
 #define render_instance_polygon_vs			default_vs
@@ -27,35 +27,16 @@ ctchou
 
 
 // reuse tessellation constants for changing color
-#define k_vs_changing_color_0	k_vs_tessellation_parameter		
+#define k_vs_changing_color_0	k_vs_tessellation_parameter
 #define k_vs_changing_color_1	k_vs_hidden_from_compiler
 
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler name : register(s##register_index);
-
-SAMPLER_CONSTANT(k_ps_texture_vmf_diffuse, 0)
-SAMPLER_CONSTANT(k_ps_texture_cloud, 1)
-
-SAMPLER_CONSTANT(k_ps_texture_imposter_atlas, 2)
-VERTEX_CONSTANT(float4, k_vs_atlas_tile_texcoord_scalar, 252)
-
-
-#ifndef pc /* implementation of xenon version */
+#if defined(xenon) || (DX_VERSION == 11) /* implementation of xenon version */
 
 
 // The following defines the protocol for passing interpolated data between vertex/pixel shaders
 struct s_imposter_card_interpolators
 {
-	float4 position						:	POSITION0;
+	float4 position						:	SV_Position0;
 	float4 color						:	COLOR0;
 	float4 texcoord_and_hdr_scalar		:	TEXCOORD1;
 	float4 fragment_to_camera_world		:	TEXCOORD2;
@@ -63,7 +44,7 @@ struct s_imposter_card_interpolators
 
 struct s_imposter_poly_interpolators
 {
-	float4 position						:	POSITION0;
+	float4 position						:	SV_Position0;
 	float4 color						:	COLOR0;
 	float4 fragment_to_camera_world		:	TEXCOORD2;
 };
@@ -82,7 +63,7 @@ struct s_imposter_vertex
 
 void deform_imposter(
 	inout s_imposter_vertex vertex)
-{	
+{
 	vertex.position=	vertex.position*Position_Compression_Scale.xyzw + Position_Compression_Offset.xyzw;
 }
 
@@ -97,7 +78,7 @@ s_imposter_poly_interpolators render_instance_polygon_vs(
 	OUT.position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
 
 	// world space direction to eye/camera
-	OUT.fragment_to_camera_world.xyz=	Camera_Position-vertex.position;	
+	OUT.fragment_to_camera_world.xyz=	Camera_Position-vertex.position;
 //	OUT.fragment_to_camera_world.w=		dot(OUT.fragment_to_camera_world.xyz, Camera_Backward);
 	OUT.fragment_to_camera_world.w=		sqrt(dot(OUT.fragment_to_camera_world.xyz, OUT.fragment_to_camera_world.xyz));
 
@@ -118,10 +99,10 @@ s_imposter_card_interpolators render_instance_card_vs(
 	OUT.position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
 
 	// world space direction to eye/camera
-	OUT.fragment_to_camera_world.xyz= Camera_Position-vertex.position;	
+	OUT.fragment_to_camera_world.xyz= Camera_Position-vertex.position;
 	OUT.fragment_to_camera_world.w=		dot(OUT.fragment_to_camera_world.xyz, Camera_Backward);
 
-	// caculated diffuse and ambient	
+	// caculated diffuse and ambient
 	OUT.color= 0;
 
 	// each tile is 256x256. The tile index is packed in z channel of color
@@ -133,7 +114,7 @@ s_imposter_card_interpolators render_instance_card_vs(
 	// scalar texcoords from tiles to the whole texture
 	OUT.texcoord_and_hdr_scalar.xy*= k_vs_atlas_tile_texcoord_scalar.xy;
 	OUT.texcoord_and_hdr_scalar.z= 0;
-	OUT.texcoord_and_hdr_scalar.w= vertex.color.w * vertex.color.w * 128.0f; // refer to k_imposter_HDR_scale_range	
+	OUT.texcoord_and_hdr_scalar.w= vertex.color.w * vertex.color.w * 128.0f; // refer to k_imposter_HDR_scale_range
 
 	return OUT;
 }
@@ -146,8 +127,8 @@ s_imposter_card_interpolators render_instance_card_vs(
 
 struct imposter_pixel
 {
-	float4 color : COLOR0;			// rgb, aa mask
-	float4 normal : COLOR1;			// normal (XYZ), spec type
+	float4 color : SV_Target0;			// rgb, aa mask
+	float4 normal : SV_Target1;			// normal (XYZ), spec type
 };
 
 
@@ -158,7 +139,7 @@ float3 calc_normal_from_position(
 {
 #ifndef pc
 	float4 gradient_horz, gradient_vert;
-	
+
 	// gradient_vert=	dx/dv, dy/dv, dx/dh, dy/dh
 	// gradient_horz=	dz/dh, dz/dv, dz/dh, dz/dv
 	asm {
@@ -174,14 +155,11 @@ float3 calc_normal_from_position(
 #else // PC
 	float3 dBPx= ddx(fragment_position_world);		// worldspace gradient along pixel x direction
 	float3 dBPy= ddy(fragment_position_world);		// worldspace gradient along pixel y direction
-	float3 bump_normal= -normalize( cross(dBPx, dBPy) );	
+	float3 bump_normal= -normalize( cross(dBPx, dBPy) );
 	return bump_normal;
 #endif // PC
 }
 
-float4 camera_normal_x : register(c150);
-float4 camera_normal_y : register(c151);
-float4 camera_normal_z : register(c152);
 
 float3 calc_normal_from_camera_z(
 	in float camera_z)					// camera_z is positive:	dot(fragment_position_world_space - camera_position_world_space, camera_forward_world_space)
@@ -197,7 +175,7 @@ float3 calc_normal_from_camera_z(
 	// normal_camera=		-cross(delta_h, delta_v);
 	// normal_camera=		normalize(unnormal_camera);
 	// normal_world=		normal_camera.x * Camera_Left + normal_camera.y * Camera_Up + normal_camera.z * Camera_Forward_;
-	
+
 	// we can optimize it by taking advantage of the zeros in the cross product, dividing out camera_z (which gets obliterated by the normalize), and then defining 3 constants:
 	//
 	// -cross(delta_h, delta_v)=	{	camera_z * ddx(camera_z) * pixel_proj_y,	camera_z * ddy(camera_z) * pixel_proj_x,	-camera_z * camera_z * pixel_proj_x * pixel_proj_y	}
@@ -208,7 +186,7 @@ float3 calc_normal_from_camera_z(
 	// camera_normal_z=		-proj_x * proj_y * camera_forward
 
 	// NOTE : this is actually incorrect, as it doesn't account for the dx/dz and dy/dz components -- it assumes these are zero
-	
+
 	return	normalize(
 				-ddx(camera_z)	* camera_z * normalize(camera_normal_x.xyz) * camera_normal_x.w +
 				-ddy(camera_z)	* camera_z * normalize(camera_normal_y.xyz) * camera_normal_y.w +
@@ -225,20 +203,20 @@ float3 calc_normal_from_camera_z(
 imposter_pixel convert_to_imposter_target(in float4 color, in float3 normal, in float normal_alpha_spec_type)
 {
 	imposter_pixel result;
-	
+
 	result.color= color;
 	result.normal.xyz= normal * 0.5f + 0.5f;		// bias and offset to all positive
 	result.normal.w= normal_alpha_spec_type;		// alpha channel for normal buffer (either blend factor, or specular type)
-	
+
 	return result;
 }
 
-sampler2D non_cubemap_sampler : register(s0);
+LOCAL_SAMPLER_2D(non_cubemap_sampler, 0);
 
 
-imposter_pixel render_instance_polygon_ps( s_imposter_poly_interpolators IN ) :COLOR0
-{		
-	float4 out_color;	
+imposter_pixel render_instance_polygon_ps( s_imposter_poly_interpolators IN ) :SV_Target0
+{
+	float4 out_color;
 	out_color.rgb=	IN.color.rgb	*	k_ps_wetness_coefficients.y;
 
 	out_color.a=	compute_antialias_blur_scalar_from_distance(IN.fragment_to_camera_world.w) * (1.0f / 32.0f);
@@ -248,9 +226,9 @@ imposter_pixel render_instance_polygon_ps( s_imposter_poly_interpolators IN ) :C
 }
 
 
-imposter_pixel render_instance_card_ps( s_imposter_card_interpolators IN ) :COLOR0
-{		
-	float4 out_color= tex2D(k_ps_texture_imposter_atlas, IN.texcoord_and_hdr_scalar.xy);
+imposter_pixel render_instance_card_ps( s_imposter_card_interpolators IN ) :SV_Target0
+{
+	float4 out_color= sample2D(k_ps_texture_imposter_atlas, IN.texcoord_and_hdr_scalar.xy);
 	clip(out_color.a - 0.95f);
 
 	// apply hdr scalar
@@ -271,7 +249,7 @@ imposter_pixel render_instance_card_ps( s_imposter_card_interpolators IN ) :COLO
 
 struct s_imposter_interpolators
 {
-	float4 position	:POSITION0;
+	float4 position	:SV_Position0;
 };
 
 s_imposter_interpolators render_instance_polygon_vs()
@@ -281,7 +259,7 @@ s_imposter_interpolators render_instance_polygon_vs()
 	return OUT;
 }
 
-float4 render_instance_polygon_ps(s_imposter_interpolators IN) :COLOR0
+float4 render_instance_polygon_ps(s_imposter_interpolators IN) :SV_Target0
 {
 	return float4(0, 1, 2, 3);
 }
@@ -293,7 +271,7 @@ s_imposter_interpolators render_instance_card_vs()
 	return OUT;
 }
 
-float4 render_instance_card_ps(s_imposter_interpolators IN) :COLOR0
+float4 render_instance_card_ps(s_imposter_interpolators IN) :SV_Target0
 {
 	return float4(0, 1, 2, 3);
 }

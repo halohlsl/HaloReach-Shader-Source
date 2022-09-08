@@ -56,7 +56,7 @@ chud_output default_vs(vertex_type IN)
 
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 	float4	emblem_pixel=	calc_emblem(IN.Texcoord, false);
 

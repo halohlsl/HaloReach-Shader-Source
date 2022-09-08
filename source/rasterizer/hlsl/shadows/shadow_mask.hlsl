@@ -5,13 +5,23 @@
 
 void get_shadow_mask(out float4 shadow_mask, in float2 fragment_position)
 {
-#if defined(pc) || !defined(SCOPE_LIGHTING_OPAQUE)  || defined(SINGLE_PASS_LIGHTING)
+#if (defined(pc) && (DX_VERSION == 9)) || !defined(SCOPE_LIGHTING_OPAQUE)  || defined(SINGLE_PASS_LIGHTING)
     shadow_mask= float4(1, .5 , .5,1);
 #else
 	float2 screen_texcoord= fragment_position.xy;
+#ifdef xenon
 	asm {
 		tfetch2D shadow_mask, screen_texcoord, shadow_mask_texture, AnisoFilter= disabled, MagFilter= point, MinFilter= point, MipFilter= point, UnnormalizedTextureCoords= true
 	};
+#elif DX_VERSION == 11
+	if (shadow_mask_enabled)
+	{
+		shadow_mask= shadow_mask_texture.Load(int3(screen_texcoord, 0));
+	} else
+	{
+		shadow_mask= 1;
+	}
+#endif
 #endif // xenon
 }
 
@@ -20,10 +30,10 @@ void apply_shadow_mask_to_vmf_lighting_coefficients(in float4 shadow_mask, inout
 {
 	// shadow_mask.a	== analytical light intensity mask
 	vmf_lighting_coefficients[0].w		*= shadow_mask.a;
-	
+
 	// shadow_mask.r	== ambient / vmf light intensity mask, removing bandwidth attenuation..
 	vmf_lighting_coefficients[1].rgb	*= shadow_mask.r;		// saturate(shadow_mask.r + shadow_intenstiy_preserve_for_vmf * (1-vmf_lighting_coefficients[1].a));
-	
+
 	// turning off ambient multiplier for now...  reinstate if we need it
 	// vmf_lighting_coefficients[3].rgb	*= shadow_mask.r;
 }

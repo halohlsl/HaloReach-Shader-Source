@@ -18,8 +18,9 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #include "shared\albedo_pass.fx"
 #include "templated\deform.fx"
 #include "shared\render_target.fx"
+#include "explicit\render_imposter_registers.fx"
 
-// rename entry point of water passes 
+// rename entry point of water passes
 #define render_object_vs			default_vs
 #define render_object_ps			default_ps
 #define render_object_blend_vs		albedo_vs
@@ -27,46 +28,12 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #define render_big_battle_object_vs		active_camo_vs
 #define render_big_battle_object_ps		active_camo_ps
 
-// Attempt to auto-synchronize constant and sampler registers between hlsl and cpp code.
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#undef BOOL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define SAMPLER_CONSTANT(name, register_index)	sampler name : register(s##register_index);
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-
-// define constants for clouds
-SAMPLER_CONSTANT(k_ps_texture_vmf_diffuse, 0)
-SAMPLER_CONSTANT(k_ps_texture_cloud, 1)
-
-SAMPLER_CONSTANT(k_ps_sampler_imposter_cubemap_0, 2)
-SAMPLER_CONSTANT(k_ps_sampler_imposter_cubemap_1, 3)
-PIXEL_CONSTANT(float4, k_ps_cubemap_constants, 180)
-PIXEL_CONSTANT(float4, k_ps_imposter_blend_alpha, 181)
-PIXEL_CONSTANT(float4, k_ps_imposter_adjustment_constants, 182)
 #define k_imposter_brightness_adjustment			k_ps_imposter_adjustment_constants.x
-
-
-VERTEX_CONSTANT(float4, k_vs_big_battle_squad_constants, 232)
-
-// PC only constants
-VERTEX_CONSTANT(float4, k_vs_big_battle_squad_positon_scale, 233)
-VERTEX_CONSTANT(float4, k_vs_big_battle_squad_foward, 234)
-VERTEX_CONSTANT(float4, k_vs_big_battle_squad_left, 235)
-VERTEX_CONSTANT(float4, k_vs_big_battle_squad_velocity, 236)
-
 
 #define _big_battle_unit_vertex_budget			k_vs_big_battle_squad_constants.x
 #define _big_battle_unit_vertex_range			k_vs_big_battle_squad_constants.y
 #define _big_battle_squad_unit_start_index		k_vs_big_battle_squad_constants.z
 #define _big_battle_squad_time_different		k_vs_big_battle_squad_constants.w
-
 
 #define pi										3.14f
 #define object_imposter_diffuse_scale			9.0f
@@ -74,12 +41,12 @@ VERTEX_CONSTANT(float4, k_vs_big_battle_squad_velocity, 236)
 #define IMPOSTER_CLOUD_SAMPLING
 #include "templated\analytical_mask.fx"
 
-#ifndef pc /* implementation of xenon version */
+#if !defined(pc) || (DX_VERSION == 11) /* implementation of xenon version */
 
 // The following defines the protocol for passing interpolated data between vertex/pixel shaders
 struct s_imposter_interpolators
 {
-	float4 position			:POSITION0;
+	float4 position			:SV_Position0;
 	float3 normal			:NORMAL0;
 	float3 diffuse			:COLOR0;
 	float3 ambient			:COLOR1;
@@ -91,7 +58,7 @@ struct s_imposter_interpolators
 
 struct s_big_battle_interpolators
 {
-	float4 position						:POSITION0;
+	float4 position						:SV_Position0;
 	float3 normal						:NORMAL0;
 	float3 diffuse						:COLOR0;
 	float3 ambient						:COLOR1;
@@ -105,19 +72,19 @@ struct s_big_battle_interpolators
 
 s_imposter_interpolators render_object_vs(
 	in s_object_imposter_vertex vertex)
-{	
+{
 	float4 local_to_world_transform[3]; // unused
 
-	
+
 	deform_object_imposter(vertex, local_to_world_transform);
 
 	s_imposter_interpolators OUT;
-	
+
 	OUT.position= mul(float4(vertex.position.xyz, 1.f), View_Projection);
 	OUT.normal= vertex.normal;
 
 	// world space direction to eye/camera
-	OUT.fragment_to_camera_world.rgb= Camera_Position-vertex.position;	
+	OUT.fragment_to_camera_world.rgb= Camera_Position-vertex.position;
 
 	// out diffuse/ambient/change_colors
 	OUT.diffuse= vertex.diffuse * vertex.diffuse;
@@ -132,46 +99,22 @@ s_imposter_interpolators render_object_vs(
 }
 
 
-s_big_battle_interpolators render_big_battle_object_vs(
-	in int index: INDEX)
-{	
-	float unit_index= floor(index/_big_battle_unit_vertex_budget);
-	float old_vertex_index= index - unit_index*_big_battle_unit_vertex_budget;
-	float vertex_index= min(old_vertex_index, _big_battle_unit_vertex_range);
-
-	
-	// get vertex data
-	float4 position, normal;
-	float4 diffuse, ambient, specular_shininess;
-	asm
-	{
-		vfetch position, vertex_index, position0
-		vfetch normal, vertex_index, normal0
-
-		vfetch diffuse, vertex_index, texcoord1
-		vfetch ambient, vertex_index, texcoord2
-		vfetch specular_shininess, vertex_index, texcoord3
-	};
-
-	// get unit data
-	float4 unit_position_scale;
-	float4 unit_foward, unit_left, unit_up;
-	float4 unit_velocity;
-
-	unit_index+= _big_battle_squad_unit_start_index;
-	asm
-	{
-		vfetch unit_velocity, unit_index, tangent0
-		vfetch unit_position_scale, unit_index, binormal0
-		vfetch unit_foward, unit_index, color0
-		vfetch unit_left, unit_index, color1
-		
-	};
-
+s_big_battle_interpolators big_battle_object_vs(
+	in float4 position,
+	in float3 normal,
+	in float3 diffuse,
+	in float3 ambient,
+	in float4 specular_shininess,
+	in float4 unit_velocity,
+	in float4 unit_position_scale,
+	in float4 unit_foward,
+	in float4 unit_left)
+{
+	float4 unit_up;
 	unit_up.xyz= cross(unit_foward, unit_left);
 
 	// decompress position
-	position.xyz= position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;	
+	position.xyz= position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
 
 	// transform position and normal to world space
 	float3 new_position=
@@ -200,19 +143,103 @@ s_big_battle_interpolators render_big_battle_object_vs(
 		OUT.fragment_to_camera_world= Camera_Position - new_position;
 		OUT.position_ws= new_position;
 	}
-	
+
+	return OUT;
+}
+
+#ifdef xenon
+s_big_battle_interpolators render_big_battle_object_vs(
+	in uint index: SV_VertexID)
+{
+	float unit_index= floor(index/_big_battle_unit_vertex_budget);
+	float old_vertex_index= index - unit_index*_big_battle_unit_vertex_budget;
+	float vertex_index= min(old_vertex_index, _big_battle_unit_vertex_range);
+
+
+	// get vertex data
+	float4 position, normal;
+	float4 diffuse, ambient, specular_shininess;
+#ifdef xenon
+	// get vertex data
+	asm
+	{
+		vfetch position, vertex_index, position0
+		vfetch normal, vertex_index, normal0
+
+		vfetch diffuse, vertex_index, texcoord1
+		vfetch ambient, vertex_index, texcoord2
+		vfetch specular_shininess, vertex_index, texcoord3
+	};
+#else
+	position = 0;
+	normal = 0;
+	diffuse = 0;
+	ambient = 0;
+	specular_shininess = 0;
+#endif
+
+	// get unit data
+	float4 unit_position_scale;
+	float4 unit_foward, unit_left;
+	float4 unit_velocity;
+
+	unit_index+= _big_battle_squad_unit_start_index;
+#ifdef xenon
+	asm
+	{
+		vfetch unit_velocity, unit_index, tangent0
+		vfetch unit_position_scale, unit_index, binormal0
+		vfetch unit_foward, unit_index, color0
+		vfetch unit_left, unit_index, color1
+
+	};
+#else
+	unit_velocity = 0;
+	unit_position_scale = 0;
+	unit_foward = 0;
+	unit_left = 0;
+#endif
+
+	s_big_battle_interpolators OUT= big_battle_object_vs(
+		position,
+		normal,
+		diffuse,
+		ambient,
+		specular_shininess,
+		unit_velocity,
+		unit_position_scale,
+		unit_foward,
+		unit_left);
+
 	if (old_vertex_index >= _big_battle_unit_vertex_range)
-	{		
+	{
 		OUT.position= k_vs_hidden_from_compiler;
 	}
 
 	return OUT;
 }
+#else
 
+s_big_battle_interpolators render_big_battle_object_vs(
+	in s_object_imposter_vertex vertex,
+	in s_big_battle_unit unit)
+{
+	return big_battle_object_vs(
+		vertex.position,
+		vertex.normal,
+		vertex.diffuse,
+		vertex.ambient,
+		vertex.specular_shininess,
+		unit.velocity,
+		unit.position_scale,
+		unit.forward,
+		unit.left);
+}
+#endif
 
 s_imposter_interpolators render_object_blend_vs(
 	in s_object_imposter_vertex vertex)
-{	
+{
 	s_imposter_interpolators OUT= render_object_vs(vertex);
 	return OUT;
 }
@@ -224,19 +251,19 @@ s_imposter_interpolators render_object_blend_vs(
 
 struct imposter_pixel
 {
-	float4 color : COLOR0;		// albedo color (RGB) + specular mask (A)
-	float4 normal : COLOR1;					// normal (XYZ)
+	float4 color : SV_Target0;			// albedo color (RGB) + specular mask (A)
+	float4 normal : SV_Target1;			// normal (XYZ)
 };
 
 
 imposter_pixel convert_to_imposter_target(in float4 color, in float3 normal, in float normal_alpha_spec_type)
 {
 	imposter_pixel result;
-	
+
 	result.color= color;
 	result.normal.xyz= normal * 0.5f + 0.5f;		// bias and offset to all positive
 	result.normal.w= normal_alpha_spec_type;		// alpha channel for normal buffer (either blend factor, or specular type)
-	
+
 	return result;
 }
 
@@ -249,32 +276,32 @@ float imposter_convertBandwidth2TextureCoord(float fFandWidth)
 }
 
 float imposter_vmf_diffuse(in float4 Y[2],in float3 vSurfNormal_in)
-{	
+{
     float2 dominant_coord=float2(dot(Y[0].xyz, vSurfNormal_in)*0.5+0.5,
         imposter_convertBandwidth2TextureCoord(Y[1].w));
-	return tex2Dlod(k_ps_texture_vmf_diffuse,float4(dominant_coord,0,0)).a;
+	return sample2Dlod(k_ps_texture_vmf_diffuse,dominant_coord,0).a;
 }
 
 float3 imposter_dual_vmf_diffuse(float3 normal, float4 lighting_constants[4])
-{	
+{
     float4 dom[2]={lighting_constants[0],lighting_constants[1]};
     float4 fil[2]={lighting_constants[2],lighting_constants[3]};
     float vmf_coeff_dom= imposter_vmf_diffuse(dom,normal);
     float vmf_coeff_fil= 0.25f;  // based on spherical harmonic or numerical integration
-    
+
     float3 vmf_lighting=vmf_coeff_dom*
         lighting_constants[1].rgb+
         vmf_coeff_fil*
-        lighting_constants[3].rgb;    
-    return vmf_lighting/pi; 
-}	
+        lighting_constants[3].rgb;
+    return vmf_lighting/pi;
+}
 
 
 float3 sample_reflect_cubemaps(
 	in float3 reflect_dir)
-{	
-	float4 reflection_0= texCUBE(k_ps_sampler_imposter_cubemap_0, reflect_dir); 
-	float4 reflection_1= texCUBE(k_ps_sampler_imposter_cubemap_1, reflect_dir); 
+{
+	float4 reflection_0= sampleCUBE(k_ps_sampler_imposter_cubemap_0, reflect_dir);
+	float4 reflection_1= sampleCUBE(k_ps_sampler_imposter_cubemap_1, reflect_dir);
 
 	reflection_0.rgb= reflection_0.rgb * reflection_0.a;
 	reflection_1.rgb= reflection_1.rgb * reflection_1.a;
@@ -298,12 +325,12 @@ float3 calculate_change_color(
 }
 
 imposter_pixel render_object_ps( s_imposter_interpolators IN )
-{	
+{
 	float4 vmf_lighting_coefficients[4]= {
-		p_vmf_lighting_constant_0, 
-		p_vmf_lighting_constant_1, 
-		p_vmf_lighting_constant_2, 
-		p_vmf_lighting_constant_3, 
+		p_vmf_lighting_constant_0,
+		p_vmf_lighting_constant_1,
+		p_vmf_lighting_constant_2,
+		p_vmf_lighting_constant_3,
 	};
 
 	float3 view_dir= normalize(IN.fragment_to_camera_world);
@@ -313,43 +340,43 @@ imposter_pixel render_object_ps( s_imposter_interpolators IN )
 	float3 diffuse_radiance= imposter_dual_vmf_diffuse(normal, vmf_lighting_coefficients);
 
 	float analytical_mask= get_analytical_mask(
-		Camera_Position_PS - IN.fragment_to_camera_world, 
+		Camera_Position_PS - IN.fragment_to_camera_world,
 		vmf_lighting_coefficients);
 
-	float3 analytical_radiance= 
-		saturate(dot(k_ps_analytical_light_direction, normal)) * 
+	float3 analytical_radiance=
+		saturate(dot(k_ps_analytical_light_direction, normal)) *
 		k_ps_analytical_light_intensity *
 		vmf_lighting_coefficients[0].w / pi;
-	float3 bounce_radiance= saturate(dot(k_ps_bounce_light_direction, normal))*k_ps_bounce_light_intensity/pi;	
-	diffuse_radiance+= analytical_mask * (analytical_radiance + bounce_radiance);	
-	
+	float3 bounce_radiance= saturate(dot(k_ps_bounce_light_direction, normal))*k_ps_bounce_light_intensity/pi;
+	diffuse_radiance+= analytical_mask * (analytical_radiance + bounce_radiance);
+
 	float3 half_dir= normalize( k_ps_analytical_light_direction + view_dir );
 	float n_dot_h= saturate(dot(normal, half_dir));
-	
+
 	// restore data
 	const float4 diffuse_tints= IN.change_colors_of_diffuse;
 	const float4 specular_tints= IN.change_colors_of_specular;
 
-	const float shininess= 
+	const float shininess=
 		IN.specular_shininess.w * 100;	// shininess
 
 	// caculated diffuse and ambient
-	const float3 diffuse= 
-		IN.diffuse * 
+	const float3 diffuse=
+		IN.diffuse *
 		calculate_change_color(diffuse_tints);
 
 	const float3 ambient= IN.ambient;
 
-	const float3 specular=		
-		IN.specular_shininess.rgb * 
+	const float3 specular=
+		IN.specular_shininess.rgb *
 		calculate_change_color(specular_tints);
-	
-	const float3 specular_radiance= k_ps_analytical_light_intensity * pow(n_dot_h, shininess);	
-	
+
+	const float3 specular_radiance= k_ps_analytical_light_intensity * pow(n_dot_h, shininess);
+
 	float4 out_color;
-	out_color.rgb= 
-		specular*specular_radiance*analytical_mask + 
-		object_imposter_diffuse_scale*diffuse*diffuse_radiance + 
+	out_color.rgb=
+		specular*specular_radiance*analytical_mask +
+		object_imposter_diffuse_scale*diffuse*diffuse_radiance +
 		ambient;
 
 	out_color.rgb*= k_imposter_brightness_adjustment;
@@ -366,33 +393,41 @@ imposter_pixel render_object_ps( s_imposter_interpolators IN )
 }
 
 
-float4 render_object_blend_ps( 
+float4 render_object_blend_ps(
 	s_imposter_interpolators IN,
-	in float2 vpos : VPOS) :COLOR0
+	in SCREEN_POSITION_INPUT(vpos)) :SV_Target0
 {
 	imposter_pixel OUT= render_object_ps(IN);
 
 
-	float4 shadow;	
+	float4 shadow;
+#ifdef xenon
 	asm {
 		tfetch2D shadow, vpos, shadow_mask_texture, UnnormalizedTextureCoords = true, MagFilter = point, MinFilter = point, MipFilter = point, AnisoFilter = disabled
-	};	
+	};
+#else
+	shadow = shadow_mask_texture.Load(int3(vpos.xy, 0));
+#endif
 
 	float alpha= k_ps_imposter_blend_alpha.a;
 	float4 out_color;
 	out_color.rgb= OUT.color.rgb * (1.0f - alpha) * shadow.a;
+#ifdef xenon
 	out_color.a= alpha * 0.03125f;	// scale by 1/32
+#else
+	out_color.a= alpha;
+#endif
 	return out_color;
 }
 
-imposter_pixel render_big_battle_object_ps( 
-	s_big_battle_interpolators IN) :COLOR0
+imposter_pixel render_big_battle_object_ps(
+	s_big_battle_interpolators IN) :SV_Target0
 {
 	float4 vmf_lighting_coefficients[4]= {
-		p_vmf_lighting_constant_0, 
-		p_vmf_lighting_constant_1, 
-		p_vmf_lighting_constant_2, 
-		p_vmf_lighting_constant_3, 
+		p_vmf_lighting_constant_0,
+		p_vmf_lighting_constant_1,
+		p_vmf_lighting_constant_2,
+		p_vmf_lighting_constant_3,
 	};
 
 	float3 view_dir= normalize(IN.fragment_to_camera_world);
@@ -402,37 +437,37 @@ imposter_pixel render_big_battle_object_ps(
 	float3 diffuse_radiance= imposter_dual_vmf_diffuse(normal, vmf_lighting_coefficients);
 
 	float analytical_mask= get_analytical_mask(
-		Camera_Position_PS - IN.fragment_to_camera_world, 
+		Camera_Position_PS - IN.fragment_to_camera_world,
 		vmf_lighting_coefficients);
 
-	float3 analytical_radiance= 
-		saturate(dot(k_ps_analytical_light_direction, normal)) * 
+	float3 analytical_radiance=
+		saturate(dot(k_ps_analytical_light_direction, normal)) *
 		k_ps_analytical_light_intensity *
 		vmf_lighting_coefficients[2].w / pi;
-	float3 bounce_radiance= saturate(dot(k_ps_bounce_light_direction, normal))*k_ps_bounce_light_intensity/pi;	
-	diffuse_radiance+= analytical_mask * (analytical_radiance + bounce_radiance);	
-	
+	float3 bounce_radiance= saturate(dot(k_ps_bounce_light_direction, normal))*k_ps_bounce_light_intensity/pi;
+	diffuse_radiance+= analytical_mask * (analytical_radiance + bounce_radiance);
+
 	float3 half_dir= normalize( k_ps_analytical_light_direction + view_dir );
 	float n_dot_h= saturate(dot(normal, half_dir));
-	
-	const float shininess= 
+
+	const float shininess=
 		IN.specular_shininess.w * 100;	// shininess
 
 	// caculated diffuse and ambient
 	const float3 diffuse= IN.diffuse;
 	const float3 ambient= IN.ambient;
 	const float3 specular= IN.specular_shininess.rgb;
-	
-	const float3 specular_radiance= k_ps_analytical_light_intensity * pow(n_dot_h, shininess);	
-	
+
+	const float3 specular_radiance= k_ps_analytical_light_intensity * pow(n_dot_h, shininess);
+
 	float4 out_color;
-	out_color.rgb= 
-		specular*specular_radiance*analytical_mask + 
-		object_imposter_diffuse_scale*diffuse*diffuse_radiance + 
+	out_color.rgb=
+		specular*specular_radiance*analytical_mask +
+		object_imposter_diffuse_scale*diffuse*diffuse_radiance +
 		ambient;
 
 	out_color.rgb*= k_imposter_brightness_adjustment;
-	
+
 	out_color.w= 0;
 
 	// apply exposure
@@ -448,7 +483,7 @@ imposter_pixel render_big_battle_object_ps(
 
 struct s_imposter_interpolators
 {
-	float4 position	:POSITION0;
+	float4 position	:SV_Position0;
 };
 
 s_imposter_interpolators render_object_vs()
@@ -458,7 +493,7 @@ s_imposter_interpolators render_object_vs()
 	return OUT;
 }
 
-float4 render_object_ps(s_imposter_interpolators IN) :COLOR0
+float4 render_object_ps(s_imposter_interpolators IN) :SV_Target0
 {
 	return float4(0,1,2,3);
 }
@@ -470,7 +505,7 @@ s_imposter_interpolators render_object_blend_vs()
 	return OUT;
 }
 
-float4 render_object_blend_ps(s_imposter_interpolators IN) :COLOR0
+float4 render_object_blend_ps(s_imposter_interpolators IN) :SV_Target0
 {
 	return float4(0,1,2,3);
 }
@@ -478,7 +513,7 @@ float4 render_object_blend_ps(s_imposter_interpolators IN) :COLOR0
 void render_big_battle_object_vs(
 	in float4 position	:POSITION0,
 	in float4 color		:TEXCOORD1,
-	out float4 out_position	: POSITION,
+	out float4 out_position	: SV_Position,
 	out float3 out_color	: TEXCOORD0)
 {
 	const float3 unit_foward= k_vs_big_battle_squad_foward.xyz;
@@ -494,10 +529,10 @@ void render_big_battle_object_vs(
 	position.xyz= position.wzy;
 
 	// decompress position
-	position.xyz= position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;	
+	position.xyz= position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
 
 	// transform position and normal to world space
-	float3 new_position= 
+	float3 new_position=
 		unit_foward*position.x +
 		unit_left*position.y +
 		unit_up*position.z;
@@ -511,7 +546,8 @@ void render_big_battle_object_vs(
 }
 
 float4 render_big_battle_object_ps(
-	in float3 color :TEXCOORD0) :COLOR0
+	in float4 screen_position : SV_Position,
+	in float3 color :TEXCOORD0) :SV_Target0
 {
 	return float4(color.rgb, 1);
 }

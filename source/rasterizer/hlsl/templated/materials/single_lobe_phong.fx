@@ -48,8 +48,20 @@ void calc_material_analytic_specular_single_lobe_phong_ps(
 	additional_diffuse_radiance= 0;
 }
 
-float roughness;
-float3 specular_tint;
+PARAM(float, roughness);
+PARAM(float3, specular_tint);
+
+float specular_power_from_roughness()
+{
+#if DX_VERSION == 11
+	if (roughness == 0)
+	{
+		return 0;
+	}
+#endif	
+
+	return 0.27291 * pow(roughness, -2.1973);
+}
 
 void calc_material_single_lobe_phong_ps(
 	in float3 view_dir,
@@ -105,7 +117,7 @@ void calc_material_single_lobe_phong_ps(
 			fragment_position_world,
 			surface_normal,
 			view_reflect_dir_world,											// view direction = fragment to camera,   reflected around fragment normal
-			0.27291 * pow(roughness, -2.1973),
+			specular_power_from_roughness(),
 			simple_light_diffuse_light,
 			simple_light_specular_light);
 	}

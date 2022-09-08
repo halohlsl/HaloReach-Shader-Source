@@ -17,9 +17,9 @@
 #endif	// !CUI_USE_CUSTOM_VERTEX_SHADER
 
 // Sample from a texture and return the result in premultiplied alpha form
-float4 cui_tex2D(in sampler2D source_sampler, in float4 sampler_transform, in float2 texcoord)
+float4 cui_tex2D(in texture_sampler_2d source_sampler, in float4 sampler_transform, in float2 texcoord)
 {
-	float4 color= tex2D(source_sampler, texcoord);
+	float4 color= sample2D(source_sampler, texcoord);
 
 	// if transform.z is 0 then we need to multiply the rgb times the alpha for this texture
 	color.rgb *= max(color.a, sampler_transform.z);
@@ -32,9 +32,9 @@ float4 cui_tex2D(in sampler2D source_sampler, in float4 sampler_transform, in fl
 
 // Sample from a texture and return the result in premultiplied alpha form,
 // and also perform linear to gamma2 conversion
-float4 cui_linear_to_gamma2_tex2D(in sampler2D source_sampler, in float4 sampler_transform, in float2 texcoord)
+float4 cui_linear_to_gamma2_tex2D(in texture_sampler_2d source_sampler, in float4 sampler_transform, in float2 texcoord)
 {
-	float4 color= tex2D(source_sampler, texcoord);
+	float4 color= sample2D(source_sampler, texcoord);
 
 	// if transform.z is 0 then we need to multiply the rgb times the alpha for this texture
 	color.rgb = sqrt(color.rgb) * max(color.a, sampler_transform.z);

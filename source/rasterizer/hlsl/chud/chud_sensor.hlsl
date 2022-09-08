@@ -36,7 +36,7 @@
 
 struct chud_output_sensor
 {
-	float4 HPosition	:POSITION;
+	float4 HPosition	:SV_Position;
 	float4 Color		:COLOR0;
 	float2 Texcoord		:TEXCOORD0;
 	float2 MicroTexcoord:TEXCOORD1;
@@ -56,9 +56,9 @@ chud_output_sensor default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output_sensor IN) : COLOR
+accum_pixel default_ps(chud_output_sensor IN) : SV_Target
 {
-	float4 bitmap_result= tex2D(basemap_sampler, IN.Texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, IN.Texcoord);
 	bitmap_result*= IN.Color;
 	bitmap_result.a*=chud_scalar_output_EF.w;
 	return chud_compute_result_pixel(bitmap_result);

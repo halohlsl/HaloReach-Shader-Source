@@ -26,21 +26,40 @@
 
 
 #ifndef SAMPLE_ALBEDO_TEXTURE
-#define SAMPLE_ALBEDO_TEXTURE tex2D
+#define SAMPLE_ALBEDO_TEXTURE sample2D
 #endif
 
-float blend_alpha;
-float4 albedo_color;
-float4 albedo_color2;		// used for color-mask
-float4 albedo_color3;
+PARAM(float, blend_alpha);
+PARAM(float4, albedo_color);
+PARAM(float4, albedo_color2);		// used for color-mask
+PARAM(float4, albedo_color3);
 
-sampler base_map;
-float4 base_map_xform;
-sampler detail_map;
-float4 detail_map_xform;
-sampler camouflage_change_color_map;
-float4 camouflage_change_color_map_xform;
-float camouflage_scale;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(base_map);
+#else
+PARAM_SAMPLER_2D(base_map);
+#endif
+PARAM(float4, base_map_xform);
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(detail_map);
+#else
+PARAM_SAMPLER_2D(detail_map);
+#endif
+PARAM(float4, detail_map_xform);
+PARAM_SAMPLER_2D(camouflage_change_color_map);
+PARAM(float4, camouflage_change_color_map_xform);
+PARAM(float, camouflage_scale);
+
+float3 srgb_de_gamma (float3 Csrgb)
+{
+   return (Csrgb<=0.04045f) ? (Csrgb/12.92f) : pow((Csrgb + 0.055f)/1.055f, 2.4f);
+}
+float3 srgb_gamma  (float3 Clinear)
+{
+   return (Clinear<=.0031308f) ? (12.92f * Clinear) : (1.055f * pow(Clinear,1.f/2.4f)) - 0.055f;
+}
+
+
 
 void calc_albedo_constant_color_ps(
 	in float2 texcoord,
@@ -48,7 +67,7 @@ void calc_albedo_constant_color_ps(
 	in float3 normal)
 {
 	albedo= albedo_color;
-	
+
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
@@ -59,7 +78,7 @@ void calc_albedo_simple_ps(
 {
 	float4	base=	SAMPLE_ALBEDO_TEXTURE(base_map,   transform_texcoord(texcoord, base_map_xform));
 	albedo.rgba= base.rgba * albedo_color.rgba;
-	
+
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
@@ -118,8 +137,12 @@ void calc_albedo_default_ps(
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
-sampler detail_map2;
-float4 detail_map2_xform;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(detail_map2);
+#else
+PARAM_SAMPLER_2D(detail_map2);
+#endif
+PARAM(float4, detail_map2_xform);
 
 void calc_albedo_detail_blend_ps(
 	in float2 texcoord,
@@ -128,8 +151,8 @@ void calc_albedo_detail_blend_ps(
 {
 	float4	base=		SAMPLE_ALBEDO_TEXTURE(base_map,		transform_texcoord(texcoord, base_map_xform));
 	base.w= saturate(base.w*blend_alpha);
-	
-	float4	detail=		SAMPLE_ALBEDO_TEXTURE(detail_map,	transform_texcoord(texcoord, detail_map_xform));	
+
+	float4	detail=		SAMPLE_ALBEDO_TEXTURE(detail_map,	transform_texcoord(texcoord, detail_map_xform));
 	float4	detail2=	SAMPLE_ALBEDO_TEXTURE(detail_map2,	transform_texcoord(texcoord, detail_map2_xform));
 
 	albedo.xyz= (1.0f-base.w)*detail.xyz + base.w*detail2.xyz;
@@ -139,8 +162,12 @@ void calc_albedo_detail_blend_ps(
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
-sampler detail_map3;
-float4 detail_map3_xform;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(detail_map3);
+#else
+PARAM_SAMPLER_2D(detail_map3);
+#endif
+PARAM(float4, detail_map3_xform);
 
 void calc_albedo_three_detail_blend_ps(
 	in float2 texcoord,
@@ -149,7 +176,7 @@ void calc_albedo_three_detail_blend_ps(
 {
 	float4 base=	SAMPLE_ALBEDO_TEXTURE(base_map,		transform_texcoord(texcoord, base_map_xform));
 	base.w= saturate(base.w*blend_alpha);
-	
+
 	float4 detail1= SAMPLE_ALBEDO_TEXTURE(detail_map,	transform_texcoord(texcoord, detail_map_xform));
 	float4 detail2= SAMPLE_ALBEDO_TEXTURE(detail_map2,	transform_texcoord(texcoord, detail_map2_xform));
 	float4 detail3= SAMPLE_ALBEDO_TEXTURE(detail_map3,	transform_texcoord(texcoord, detail_map3_xform));
@@ -166,15 +193,19 @@ void calc_albedo_three_detail_blend_ps(
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
-sampler change_color_map;
-float4 change_color_map_xform;
-sampler decal_change_color_map;
-float4 decal_change_color_map_xform;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(change_color_map);
+#else
+PARAM_SAMPLER_2D(change_color_map);
+#endif
+PARAM(float4, change_color_map_xform);
+PARAM_SAMPLER_2D(decal_change_color_map);
+PARAM(float4, decal_change_color_map_xform);
 
-float3 primary_change_color;
-float3 secondary_change_color;
-float3 tertiary_change_color;
-float3 quaternary_change_color;
+PARAM(float3, primary_change_color);
+PARAM(float3, secondary_change_color);
+PARAM(float3, tertiary_change_color);
+PARAM(float3, quaternary_change_color);
 
 void calc_albedo_two_change_color_ps(
 	in float2 texcoord,
@@ -190,7 +221,7 @@ void calc_albedo_two_change_color_ps(
 
 	albedo.xyz= DETAIL_MULTIPLIER * base.xyz*detail.xyz*change_color.xyz;
 	albedo.w= base.w*detail.w;
-	
+
 	apply_pc_albedo_modifier(albedo, normal);
 }
 
@@ -210,7 +241,7 @@ void calc_albedo_four_change_color_ps(
 
 	albedo.xyz= DETAIL_MULTIPLIER * base.xyz*detail.xyz*change_color.xyz;
 	albedo.w= base.w*detail.w;
-	
+
 	apply_pc_albedo_modifier(albedo, normal);
 
 }
@@ -222,8 +253,12 @@ void calc_albedo_four_change_color_applying_to_specular_ps(in float2 texcoord,
 	calc_albedo_four_change_color_ps(texcoord, albedo, normal);
 }
 
-sampler detail_map_overlay;
-float4 detail_map_overlay_xform;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(detail_map_overlay);
+#else
+PARAM_SAMPLER_2D(detail_map_overlay);
+#endif
+PARAM(float4, detail_map_overlay_xform);
 
 void calc_albedo_two_detail_overlay_ps(
 	in float2 texcoord,
@@ -231,12 +266,12 @@ void calc_albedo_two_detail_overlay_ps(
 	in float3 normal)
 {
 	float4	base=				SAMPLE_ALBEDO_TEXTURE(base_map,				transform_texcoord(texcoord, base_map_xform));
-	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));	
+	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));
 	float4	detail2=			SAMPLE_ALBEDO_TEXTURE(detail_map2,			transform_texcoord(texcoord, detail_map2_xform));
 	float4	detail_overlay=		SAMPLE_ALBEDO_TEXTURE(detail_map_overlay,	transform_texcoord(texcoord, detail_map_overlay_xform));
 
 	float4 detail_blend= (1.0f-base.w)*detail + base.w*detail2;
-	
+
 	albedo.xyz= base.xyz * (DETAIL_MULTIPLIER * DETAIL_MULTIPLIER) * detail_blend.xyz * detail_overlay.xyz;
 	albedo.w= detail_blend.w * detail_overlay.w;
 
@@ -250,9 +285,9 @@ void calc_albedo_two_detail_ps(
 	in float3 normal)
 {
 	float4	base=				SAMPLE_ALBEDO_TEXTURE(base_map,				transform_texcoord(texcoord, base_map_xform));
-	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));	
+	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));
 	float4	detail2=			SAMPLE_ALBEDO_TEXTURE(detail_map2,			transform_texcoord(texcoord, detail_map2_xform));
-	
+
 	albedo.xyz= base.xyz * (DETAIL_MULTIPLIER * DETAIL_MULTIPLIER) * detail.xyz * detail2.xyz;
 	albedo.w= base.w * detail.w * detail2.w;
 
@@ -260,9 +295,13 @@ void calc_albedo_two_detail_ps(
 }
 
 
-sampler color_mask_map;
-float4 color_mask_map_xform;
-float4 neutral_gray;
+#ifdef ALBEDO_TEXTURE_ARRAY
+PARAM_SAMPLER_2D_ARRAY(color_mask_map);
+#else
+PARAM_SAMPLER_2D(color_mask_map);
+#endif
+PARAM(float4, color_mask_map_xform);
+PARAM(float4, neutral_gray);
 
 void calc_albedo_color_mask_ps(
 	in float2 texcoord,
@@ -289,9 +328,9 @@ void calc_albedo_two_detail_black_point_ps(
 	in float3 normal)
 {
 	float4	base=				SAMPLE_ALBEDO_TEXTURE(base_map,				transform_texcoord(texcoord, base_map_xform));
-	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));	
+	float4	detail=				SAMPLE_ALBEDO_TEXTURE(detail_map,			transform_texcoord(texcoord, detail_map_xform));
 	float4	detail2=			SAMPLE_ALBEDO_TEXTURE(detail_map2,			transform_texcoord(texcoord, detail_map2_xform));
-	
+
 	albedo.xyz= base.xyz * (DETAIL_MULTIPLIER * DETAIL_MULTIPLIER) * detail.xyz * detail2.xyz;
 	albedo.w= apply_black_point(base.w, detail.w * detail2.w);
 
@@ -312,7 +351,7 @@ void restore_specular_mask(inout float4 albedo, float specular_mask_scale)
 {
 #ifdef BLEND_MODE_OFF
 	albedo.w*=albedo.w;
-	albedo.w/= specular_mask_scale;
+	albedo.w/= max(0.0000001, specular_mask_scale);
 #endif // BLEND_MODE_OFF
 }
 

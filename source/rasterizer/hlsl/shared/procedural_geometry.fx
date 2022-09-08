@@ -20,8 +20,13 @@ float2 generate_quad_point_2d(		// produces the given corner of the unit-size ax
 	{
 		float2( 0.0f, 0.0f ),	// 0
 		float2( 1.0f, 0.0f ),	// 1
+#if DX_VERSION == 11
+		float2( 0.0f, 1.0f ),	// 2
+		float2( 1.0f, 1.0f ),	// 3
+#else
 		float2( 1.0f, 1.0f ),	// 2
 		float2( 0.0f, 1.0f ),	// 3
+#endif
 	};
 	return verts[QUAD_MOD4(index_int)];
 #else // xenon
@@ -55,9 +60,9 @@ float2 generate_rotated_quad_point_2d(
 	float index_int,
 	float2 origin,
 	float2 dx)
-{	
+{
 	float2 coord=	generate_quad_point_2d(index_int) - 0.5f;
-	
+
 	return	origin + coord.x * dx + coord.y * float2(-dx.y, dx.x);
 }
 

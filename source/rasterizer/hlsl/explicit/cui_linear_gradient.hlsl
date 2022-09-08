@@ -1,9 +1,10 @@
 //#line 2 "source\rasterizer\hlsl\explicit\cui_linear_gradient.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "explicit\cui_hlsl.fx"
 //@generate screen
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	float4 color = cui_tex2D(IN.texcoord);
 

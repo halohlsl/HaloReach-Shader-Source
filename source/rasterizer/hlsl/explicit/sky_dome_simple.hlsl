@@ -18,7 +18,7 @@ struct VS_INPUT
 
 struct VS_OUTPUT
 {
-	float4 pos : POSITION;
+	float4 pos : SV_Position;
 	float3 color : TEXCOORD0;
 	float3 normal : TEXCOORD1;
 };
@@ -42,7 +42,7 @@ accum_pixel default_ps(VS_OUTPUT input)
 
 	float4 out_color= float4(input.color * g_exposure.rrr, 1.0f);
 
-#ifdef xenon
+#if defined(xenon) || (DX_VERSION == 11)
 	float3 sun= pow(max(dot(p_lighting_constant_0.xyz, normalize(input.normal)), 0.0f), p_lighting_constant_0.w) * p_lighting_constant_1.rgb;
 #else // PC
 	// pc shader compiler has a bug somewhere...  the above line doesn't compile

@@ -1,6 +1,8 @@
 #ifndef __ATMOSPHERE_LUT_FX_H__
 #define __ATMOSPHERE_LUT_FX_H__
 
+#include "shared\atmosphere_structs.fx"
+
 // this file defines the atmosphere look-up table mapping
 
 
@@ -10,29 +12,9 @@
 
 
 #ifdef	LUT_USING_CPU_PRECOMPUTION
-	struct s_atmosphere_precomputed_LUT_constants
-	{
-		float4 lut_data[4];
-	
-		#define MAX_VIEW_DISTANCE							lut_data[0].x
-		#define ONE_OVER_MAX_VIEW_DISTANCE					lut_data[0].y
-		#define	LUT_Z_FLOOR									lut_data[0].z
-		#define	LUT_Z_CEILING								lut_data[0].w
 
-		#define LUT_coeff_a									lut_data[1].x
-		#define LUT_coeff_b									lut_data[1].y
-		#define	LUT_clamped_view_z							lut_data[1].z
-		#define	LUT_Z_MIDDLE								lut_data[1].w
-
-		#define	LUT_one_over_coeff_b						lut_data[2].x
-		#define	LUT_log_coeff_a								lut_data[2].y
-		#define	LUT_log2_coeff_a							lut_data[2].z
-
-		#define	LUT_y_map_coeffs							lut_data[3]	
-	};
-
-//	#define PIN_LUT(z)										clamp(z, LUT_Z_FLOOR, LUT_Z_CEILING)	
-	#define	LUT_DELTA										0.0001	
+//	#define PIN_LUT(z)										clamp(z, LUT_Z_FLOOR, LUT_Z_CEILING)
+	#define	LUT_DELTA										0.0001
 
 	float LUT_get_z_from_coord(
 		in s_atmosphere_precomputed_LUT_constants constants,
@@ -73,14 +55,14 @@
 
 /*
 	#define	MAX_VIEW_DISTANCE					10000.0f
-	#define	ONE_OVER_MAX_VIEW_DISTANCE			1.0f/MAX_VIEW_DISTANCE		
+	#define	ONE_OVER_MAX_VIEW_DISTANCE			1.0f/MAX_VIEW_DISTANCE
 
 	#define LUT_GROUND_THICK_RANGE		10.0f
 	#define LUT_SKY_THICK_RANGE			20.0f
-	
+
 	#define LUT_Z_FLOOR				\
 		min( (_ground_fog_height + _ground_fog_base_height - LUT_GROUND_THICK_RANGE), (_camera_position.z - LUT_GROUND_THICK_RANGE) )
-	
+
 
 	#define LUT_Z_MIDDLE				\
 		max ( (_ground_fog_height+_ground_fog_base_height),  LUT_Z_FLOOR+1.0f)
@@ -95,8 +77,8 @@
 	float LUT_evaluate_parameters(
 		out float a,
 		out float b)
-	{			
-		float M= LUT_Z_CEILING - LUT_Z_FLOOR;					
+	{
+		float M= LUT_Z_CEILING - LUT_Z_FLOOR;
 		float N= LUT_Z_MIDDLE - LUT_Z_FLOOR;
 
 		const float log_M= log(M);
@@ -106,7 +88,7 @@
 		a= exp( (log_half*log_M) / (log_N - log_M) );
 		b= (log_N - log_M) / log_half;
 	}
-	
+
 	float LUT_get_z_from_coord(in float x)
 	{
 		float a, b;

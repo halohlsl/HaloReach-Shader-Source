@@ -6,10 +6,10 @@
 // custom specular
 //****************************************************************************
 
-sampler2D	specular_lobe;							// specular power, tint	(indexed by direction towards sun, and material map)
-sampler1D	glancing_falloff;						// fresnel curve
-sampler2D	material_map;							// material map -- 
-float4		material_map_xform;						// 
+PARAM_SAMPLER_2D(specular_lobe);						// specular power, tint	(indexed by direction towards sun, and material map)
+PARAM_SAMPLER_2D(glancing_falloff);						// fresnel curve
+PARAM_SAMPLER_2D(material_map);							// material map --
+PARAM(float4, material_map_xform);						//
 
 
 //*****************************************************************************
@@ -48,7 +48,7 @@ float3 calc_material_analytic_specular_custom_specular_ps(
     float3 final_specular_color;
 	float specular_power=	50.0f;
     float n_dot_v = dot(normal_dir, view_dir);
-    final_specular_color=	tex1D(glancing_falloff, n_dot_v).rgb;
+    final_specular_color=	sample1D(glancing_falloff, n_dot_v).rgb;
 
 	float3 surface_normal= tangent_frame[2];
 	float albedo_blend=	0.0f;
@@ -64,13 +64,13 @@ float3 calc_material_analytic_specular_custom_specular_ps(
 	float3 half_dir=	normalize(view_dir + light_dir);
 	float h_dot_n=		saturate(dot(half_dir, normal_dir));
 
-	float material_sample=		tex2D(material_map, transform_texcoord(texcoord, material_map_xform)).g;
+	float material_sample=		sample2D(material_map, transform_texcoord(texcoord, material_map_xform)).g;
 
-	float4 lobe_sample=	tex2D(specular_lobe, float2(h_dot_n, material_sample));
+	float4 lobe_sample=	sample2D(specular_lobe, float2(h_dot_n, material_sample));
 
 	analytic_specular_radiance= light_irradiance * final_specular_color * lobe_sample.rgb * lobe_sample.rgb;
 	normal_specular_blend_albedo_color= float3(1.0f, 1.0f, 1.0f);		// specular_tint
-	
+
 	additional_diffuse_radiance= 0;
 	return final_specular_color;
 }
@@ -79,7 +79,7 @@ float3 calc_material_analytic_specular_custom_specular_ps(
 //*****************************************************************************
 // the material model
 //*****************************************************************************
-	
+
 void calc_material_custom_specular_ps(
 	in float3 view_dir,
 	in float3 fragment_to_camera_world,
@@ -102,7 +102,7 @@ void calc_material_custom_specular_ps(
 	float3 specular_albedo_color;
 	float4 material_parameters;
 	float3 additional_diffuse_radiance;
-	
+
 	float3 final_specular_color=calc_material_analytic_specular_custom_specular_ps(
 		view_dir,
 		surface_normal,
@@ -119,10 +119,10 @@ void calc_material_custom_specular_ps(
 		additional_diffuse_radiance);
 
 /*
-	// calculate simple dynamic lights	
+	// calculate simple dynamic lights
 	float3 simple_light_diffuse_light;//= 0.0f;
-	float3 simple_light_specular_light;//= 0.0f;	
-	
+	float3 simple_light_specular_light;//= 0.0f;
+
 	if (!no_dynamic_lights)
 	{
 		float3 fragment_position_world= Camera_Position_PS - fragment_to_camera_world;
@@ -142,7 +142,7 @@ void calc_material_custom_specular_ps(
 	}
 */
 
-/*	
+/*
 	float3 area_specular_radiance;
 	if (order3_area_specular)
 	{
@@ -165,20 +165,20 @@ void calc_material_custom_specular_ps(
 			area_specular_radiance);
 	}
 */
-	
+
 	//scaling and masking
 //	specular_color.xyz= specular_mask * material_parameters.r * (
 //		(simple_light_specular_light + max(final_specular_color, 0.0f)) * analytical_specular_contribution +
 //		max(area_specular_radiance * area_specular_contribution, 0.0f));
 
-	specular_color.xyz=	specular_mask * (final_specular_color * material_parameters.r);	
+	specular_color.xyz=	specular_mask * (final_specular_color * material_parameters.r);
 	specular_color.w= 0.0f;
 
-	//modulate with prt	
+	//modulate with prt
 	specular_color*= prt_ravi_diff.z;
 
 	//output for environment stuff
-	envmap_area_specular_only= prt_ravi_diff.z;		// area_specular_radiance * 
+	envmap_area_specular_only= prt_ravi_diff.z;		// area_specular_radiance *
 	envmap_specular_reflectance_and_roughness.xyz=	specular_fresnel_color * specular_mask * material_parameters.b * material_parameters.r;
 	envmap_specular_reflectance_and_roughness.w=	0.0f;					// max(0.01f, 1.01 - material_parameters.a / 200.0f);		// convert specular power to roughness (cheap and bad approximation);
 
@@ -190,4 +190,4 @@ void calc_material_custom_specular_ps(
 }
 
 
-#endif 
+#endif

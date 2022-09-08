@@ -28,7 +28,7 @@ Friday February 23, 2007, 12:05pm Stefan S.
 // stolen from post_process.fx - declaration conflicts force this
 struct s_screen_output
 {
-	float4 position : POSITION;
+	float4 position : SV_Position;
 	float2 texcoord : TEXCOORD0;
 	float4 color : COLOR;
 };
@@ -47,7 +47,7 @@ s_screen_output default_vs(vertex_type IN)
 
 // pixel fragment entry points
 
-accum_pixel default_ps(s_world_vertex IN) : COLOR
+accum_pixel default_ps(s_world_vertex IN) : SV_Target
 {
 	float4 emblem_pixel= calc_emblem(IN.texcoord, true);
 	

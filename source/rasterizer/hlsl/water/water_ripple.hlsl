@@ -1,7 +1,7 @@
 /*
 WATER_RIPPLE.HLSL
 Copyright (c) Microsoft Corporation, 2005. all rights reserved.
-04/12/2006 13:36 davcook	
+04/12/2006 13:36 davcook
 */
 
 //This comment causes the shader compiler to be invoked for certain vertex types and entry points
@@ -12,30 +12,26 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 //@entry dynamic_light
 //@entry shadow_apply
 
+#if DX_VERSION == 11
+//@compute_shader
+#endif
+
 #include "hlsl_constant_globals.fx"
 #include "shared\blend.fx"
-
-// Attempt to auto-synchronize constant and sampler registers between hlsl and cpp code.
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler name : register(s##register_index);
 #include "water\water_registers.fx"
+#include "water\ripple.fx"
 
 #include "shared\render_target.fx"
 
-// rename entry point of water passes 
-#define ripple_add_vs			active_camo_vs	
-#define ripple_add_ps			active_camo_ps	
+
+// rename entry point of water passes
+#define ripple_add_vs			active_camo_vs
+#define ripple_add_ps			active_camo_ps
 #define ripple_update_vs		default_vs
 #define ripple_update_ps		default_ps
+#if DX_VERSION == 11
+#define ripple_update_cs		default_cs
+#endif
 #define ripple_apply_vs			albedo_vs
 #define ripple_apply_ps			albedo_ps
 #define ripple_slope_vs			default_dynamic_light_vs
@@ -43,71 +39,39 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #define underwater_vs			shadow_apply_vs
 #define underwater_ps			shadow_apply_ps
 
-#ifndef pc /* implementation of xenon version */
-
 //	ignore the vertex_type, input vertex type defined locally
 struct s_ripple_vertex_input
 {
-	int index		:	INDEX;
-};
+	#if (DX_VERSION == 9) && defined(pc)
+		float4 position_flow: POSITION0;
+		float4 life_height	: TEXCOORD0;
+		float4 shock_size	: TEXCOORD1;
+		float4 pendulum		: TEXCOORD2;
+		float4 pattern		: TEXCOORD3;
+		float4 foam			: TEXCOORD4;
+		float4 flags		: COLOR0;
+		float4 funcs		: COLOR1;
 
-struct s_ripple
-{
-	// pos_flow : position0
-	float2 position;
-	float2 flow;
-
-	// life_height : texcoord0
-	float life;	
-	float duration;
-	float rise_period;	
-	float height;
-
-	// shock_spread : texcoord1
-	float2 shock;	
-	float size;	
-	float spread;
-
-	// pendulum : texcoord2
-	float pendulum_phase;
-	float pendulum_revolution;
-	float pendulum_repeat;
-
-	// pattern : texcoord3
-	float pattern_start_index;
-	float pattern_end_index;
-
-	// foam : texcoord4
-	float foam_out_radius;
-	float foam_fade_distance;
-	float foam_life;
-	float foam_duration;	
-
-	// flags : color0
-	bool flag_drift;	
-	bool flag_pendulum;
-	bool flag_foam;
-	bool flag_foam_game_unit;
-
-	// funcs : color1
-	int func_rise;
-	int func_descend;
-	int func_pattern;
-	int func_foam;	
+		float2 index		: TEXCOORD5;
+	#elif DX_VERSION == 11
+		uint index : SV_VertexID;
+	#else
+		int index : SV_VertexID;
+	#endif
 };
 
 // The following defines the protocol for passing interpolated data between vertex/pixel shaders
 struct s_ripple_interpolators
 {
-	float4 position			:POSITION0;
+	float4 position			:SV_Position;
 	float4 texcoord			:TEXCOORD0;
-	float4 pendulum			:TEXCOORD1;	
-	float4 foam				:TEXCOORD2;	
+	float4 pendulum			:TEXCOORD1;
+	float4 foam				:TEXCOORD2;
 };
 
 struct s_underwater_interpolators
 {
-	float4 position			:POSITION0;
+	float4 position			:SV_Position;
 	float4 position_ss		:TEXCOORD0;
 };
 
@@ -128,12 +92,10 @@ static const int ripple_vertex_stream_block_num= 8; // number of float4 blocks i
 
 #define _2pi 6.28318530718f
 
-#ifdef VERTEX_SHADER
-
 // grabbed from function.fx
 float evaluate_transition_internal(int transition_type, float input)
 {
-	float output;							
+	float output;
 	if (transition_type==_transition_function_linear)
 	{
 		output= input;
@@ -169,6 +131,7 @@ float evaluate_transition_internal(int transition_type, float input)
 	return output;
 }
 
+#if DX_VERSION == 9
 // fetch a ripple particle
 s_ripple fetch_ripple(int index)
 {
@@ -179,7 +142,19 @@ s_ripple fetch_ripple(int index)
 	float4 pattern;
 	float4 foam;
 	float4 flags;
-	float4 funcs;	
+	float4 funcs;
+
+#ifdef pc
+	position_flow = float4(0,0,0,0);
+	position_flow = float4(0,0,0,0);
+	life_height = float4(0,0,0,0);
+	shock_size = float4(0,0,0,0);
+	pendulum = float4(0,0,0,0);
+	pattern = float4(0,0,0,0);
+	foam = float4(0,0,0,0);
+	flags = float4(0,0,0,0);
+	funcs = float4(0,0,0,0);
+#else
 	asm {
 		vfetch position_flow,	index,	position0
 		vfetch life_height,		index,	texcoord0
@@ -190,50 +165,107 @@ s_ripple fetch_ripple(int index)
 		vfetch flags,			index,	color0
 		vfetch funcs,			index,	color1
 	};
+#endif
 
-	s_ripple OUT;
-	OUT.position= position_flow.xy;
-	OUT.flow= position_flow.zw;
+	s_ripple _OUT;
+	_OUT.position= position_flow.xy;
+	_OUT.flow= position_flow.zw;
 
-	OUT.life= life_height.x;
-	OUT.duration= life_height.y;
-	OUT.rise_period= life_height.z;
-	OUT.height= life_height.w;
+	_OUT.life= life_height.x;
+	_OUT.duration= life_height.y;
+	_OUT.rise_period= life_height.z;
+	_OUT.height= life_height.w;
 
-	OUT.shock= shock_size.xy;
-	OUT.size= shock_size.z;
-	OUT.spread= shock_size.w;
+	_OUT.shock= shock_size.xy;
+	_OUT.size= shock_size.z;
+	_OUT.spread= shock_size.w;
 
-	OUT.pendulum_phase= pendulum.x;
-	OUT.pendulum_revolution= pendulum.y;
-	OUT.pendulum_repeat= pendulum.z;
+	_OUT.pendulum_phase= pendulum.x;
+	_OUT.pendulum_revolution= pendulum.y;
+	_OUT.pendulum_repeat= pendulum.z;
 
-	OUT.pattern_start_index= pattern.x;
-	OUT.pattern_end_index= pattern.y;
+	_OUT.pattern_start_index= pattern.x;
+	_OUT.pattern_end_index= pattern.y;
 
-	OUT.foam_out_radius= foam.x;
-	OUT.foam_fade_distance= foam.y;
-	OUT.foam_life= foam.z;
-	OUT.foam_duration= foam.w;
+	_OUT.foam_out_radius= foam.x;
+	_OUT.foam_fade_distance= foam.y;
+	_OUT.foam_life= foam.z;
+	_OUT.foam_duration= foam.w;
 
-	OUT.flag_drift= flags.x;
-	OUT.flag_pendulum= flags.y;
-	OUT.flag_foam= flags.z;	
-	OUT.flag_foam_game_unit= flags.w;
+	_OUT.flag_drift= flags.x;
+	_OUT.flag_pendulum= flags.y;
+	_OUT.flag_foam= flags.z;
+	_OUT.flag_foam_game_unit= flags.w;
 
-	OUT.func_rise= funcs.x;
-	OUT.func_descend= funcs.y;
-	OUT.func_pattern= funcs.z;
-	OUT.func_foam= funcs.w;
+	_OUT.func_rise= funcs.x;
+	_OUT.func_descend= funcs.y;
+	_OUT.func_pattern= funcs.z;
+	_OUT.func_foam= funcs.w;
 
-	return OUT;
+	return _OUT;
 }
 
 
-void ripple_add_vs(s_ripple_vertex_input IN)
-{	
-	const float4 k_offset_const= { 0, 1, 0, 0 };
-	int index= IN.index;
+#ifndef pc
+s_ripple fetch_ripple_from_input(s_ripple_vertex_input vIN)
+{
+	float4 position_flow = vIN.position_flow;
+	float4 life_height	 = vIN.life_height;
+	float4 shock_size	 = vIN.shock_size;
+	float4 pendulum		 = vIN.pendulum;
+	float4 pattern		 = vIN.pattern;
+	float4 foam			 = vIN.foam;
+	float4 flags		 = vIN.flags;
+	float4 funcs		 = vIN.funcs;
+
+	s_ripple _OUT;
+	_OUT.position= position_flow.xy;
+	_OUT.flow= position_flow.zw;
+
+	_OUT.life= life_height.x;
+	_OUT.duration= life_height.y;
+	_OUT.rise_period= life_height.z;
+	_OUT.height= life_height.w;
+
+	_OUT.shock= shock_size.xy;
+	_OUT.size= shock_size.z;
+	_OUT.spread= shock_size.w;
+
+	_OUT.pendulum_phase= pendulum.x;
+	_OUT.pendulum_revolution= pendulum.y;
+	_OUT.pendulum_repeat= pendulum.z;
+
+	_OUT.pattern_start_index= pattern.x;
+	_OUT.pattern_end_index= pattern.y;
+
+	_OUT.foam_out_radius= foam.x;
+	_OUT.foam_fade_distance= foam.y;
+	_OUT.foam_life= foam.z;
+	_OUT.foam_duration= foam.w;
+
+	_OUT.flag_drift= flags.x;
+	_OUT.flag_pendulum= flags.y;
+	_OUT.flag_foam= flags.z;
+	_OUT.flag_foam_game_unit= flags.w;
+
+	_OUT.func_rise= funcs.x;
+	_OUT.func_descend= funcs.y;
+	_OUT.func_pattern= funcs.z;
+	_OUT.func_foam= funcs.w;
+
+	return _OUT;
+}
+#endif
+
+
+#ifdef pc
+   float4 ripple_add_vs(s_ripple_vertex_input _IN) : SV_Position
+#else
+   void ripple_add_vs(s_ripple_vertex_input _IN)
+#endif
+{
+   const float4 k_offset_const= { 0, 1, 0, 0 };
+	int index= _IN.index;
 
 	s_ripple ripple= fetch_ripple(index);
 
@@ -253,17 +285,18 @@ void ripple_add_vs(s_ripple_vertex_input IN)
 		dst_index -= k_vs_maximum_ripple_particle_number;
 	}
 
-	// export to stream	
+	// export to stream
 	int out_index_0= dst_index * ripple_vertex_stream_block_num;
 	int out_index_1= out_index_0 + 1;
 	int out_index_2= out_index_0 + 2;
 	int out_index_3= out_index_0 + 3;
 	int out_index_4= out_index_0 + 4;
-	int out_index_5= out_index_0 + 5;		
-	int out_index_6= out_index_0 + 6;		
-	int out_index_7= out_index_0 + 7;			
+	int out_index_5= out_index_0 + 5;
+	int out_index_6= out_index_0 + 6;
+	int out_index_7= out_index_0 + 7;
 
 	// only update, when ripple is alive
+#ifndef pc
 	asm
 	{
 		alloc export= 1
@@ -298,9 +331,13 @@ void ripple_add_vs(s_ripple_vertex_input IN)
 		mad eA, out_index_7, k_offset_const, k_vs_ripple_memexport_addr
 		mov eM0, funcs
 	};
+#endif
 
-	// This is a workaround for a bug in >=Profile builds.  Without it, we get occasional 
+	// This is a workaround for a bug in >=Profile builds.  Without it, we get occasional
 	// bogus memexports from nowhere during effect-heavy scenes.
+#ifdef pc
+	return float4(0,0,0,0);
+#else
 	asm {
 	alloc export=1
 		mad eA.xyzw, hidden_from_compiler.y, hidden_from_compiler.yyyy, hidden_from_compiler.yyyy
@@ -309,29 +346,43 @@ void ripple_add_vs(s_ripple_vertex_input IN)
 	alloc export=1
 		mad eA.xyzw, hidden_from_compiler.z, hidden_from_compiler.zzzz, hidden_from_compiler.zzzz
 	};
+#endif
 }
 
+#endif
 
-void ripple_update_vs(s_ripple_vertex_input IN)
+
+void ripple_update_main(inout s_ripple ripple)
 {
-	const float4 k_offset_const= { 0, 1, 0, 0 };
-	int index= IN.index;
-
-	s_ripple ripple= fetch_ripple(index);
-
 	if (ripple.life > -0.1f)
-	{		
+	{
 		ripple.size+= ripple.spread * k_vs_ripple_real_frametime_ratio;
 		ripple.pendulum_phase+= ripple.pendulum_revolution * k_vs_ripple_real_frametime_ratio;
 
 		if ( ripple.flag_drift )
 		{
-			ripple.position+= ripple.flow * k_vs_ripple_real_frametime_ratio;
+			ripple.position+= float2(ripple.flow) * float(k_vs_ripple_real_frametime_ratio);
 		}
 
 		ripple.life-= k_ripple_time_per_frame * k_vs_ripple_real_frametime_ratio;
 		ripple.foam_life-= k_ripple_time_per_frame * k_vs_ripple_real_frametime_ratio;
 	}
+}
+
+#if DX_VERSION == 9
+
+#ifdef pc
+	float4 ripple_update_vs(s_ripple_vertex_input _IN) : SV_Position
+#else
+	void ripple_update_vs(s_ripple_vertex_input _IN)
+#endif
+{
+ 	const float4 k_offset_const= { 0, 1, 0, 0 };
+	int index= _IN.index;
+
+	s_ripple ripple= fetch_ripple(index);
+
+	ripple_update_main(ripple);
 
 	// pack data
 	float4 position_flow= float4(ripple.position, ripple.flow);
@@ -340,17 +391,19 @@ void ripple_update_vs(s_ripple_vertex_input IN)
 	float4 pendulum= float4(ripple.pendulum_phase, ripple.pendulum_revolution, ripple.pendulum_repeat, 0.0f);
 	float4 foam= float4(ripple.foam_out_radius, ripple.foam_fade_distance, ripple.foam_life, ripple.foam_duration);
 
-	// export to stream	
+	// export to stream
 	int out_index_0= index * ripple_vertex_stream_block_num;
 	int out_index_1= out_index_0 + 1;
 	int out_index_2= out_index_0 + 2;
 	int out_index_3= out_index_0 + 3;
 	// skip 4
-	int out_index_5= out_index_0 + 5;		
+	int out_index_5= out_index_0 + 5;
 	// skip 6
 	// skip 7
 
+
 	// only update, when ripple is alive
+#ifndef pc
 	asm
 	{
 		alloc export= 1
@@ -373,9 +426,13 @@ void ripple_update_vs(s_ripple_vertex_input IN)
 		mad eA, out_index_5, k_offset_const, k_vs_ripple_memexport_addr
 		mov eM0, foam
 	};
+#endif
 
-	// This is a workaround for a bug in >=Profile builds.  Without it, we get occasional 
+	// This is a workaround for a bug in >=Profile builds.  Without it, we get occasional
 	// bogus memexports from nowhere during effect-heavy scenes.
+#ifdef pc
+	return float4(0,0,0,0);
+#else
 	asm {
 	alloc export=1
 		mad eA.xyzw, hidden_from_compiler.y, hidden_from_compiler.yyyy, hidden_from_compiler.yyyy
@@ -384,29 +441,82 @@ void ripple_update_vs(s_ripple_vertex_input IN)
 	alloc export=1
 		mad eA.xyzw, hidden_from_compiler.z, hidden_from_compiler.zzzz, hidden_from_compiler.zzzz
 	};
+#endif
 }
 
+#elif DX_VERSION == 11
+
+#ifdef COMPUTE_SHADER
+
+[numthreads(CS_RIPPLE_UPDATE_THREADS,1,1)]
+void ripple_update_cs(in uint raw_index : SV_DispatchThreadID)
+{
+	uint index = raw_index + ripple_index_range.x;
+	if (index < ripple_index_range.y)
+	{
+		s_ripple ripple = cs_ripple_buffer[index];
+		ripple_update_main(ripple);
+		cs_ripple_buffer[index] = ripple;
+	}
+}
+
+#endif
+
+#endif
+
+#ifdef VERTEX_SHADER
+
 #define k_ripple_corners_number 16
-static const float2 k_ripple_corners[k_ripple_corners_number]= { 
-		float2(-1, -1), float2(0, -1), float2(0, 0), float2(-1, 0),
-		float2(0, -1), float2(1, -1), float2(1, 0), float2(0, 0),
-		float2(0, 0), float2(1, 0), float2(1, 1), float2(0, 1),
-		float2(-1, 0), float2(0, 0), float2(0, 1), float2(-1, 1)};
+static const float2 k_ripple_corners[k_ripple_corners_number]=
+{
+#if DX_VERSION == 9
+	float2(-1, -1), float2(0, -1), float2(0, 0), float2(-1, 0),
+	float2(0, -1), float2(1, -1), float2(1, 0), float2(0, 0),
+	float2(0, 0), float2(1, 0), float2(1, 1), float2(0, 1),
+	float2(-1, 0), float2(0, 0), float2(0, 1), float2(-1, 1)
+#elif DX_VERSION == 11
+	float2(-1, -1), float2(0, -1),  float2(-1, 0), float2(0, 0),
+	float2(0, -1), float2(1, -1),  float2(0, 0), float2(1, 0),
+	float2(0, 0), float2(1, 0),  float2(0, 1), float2(1, 1),
+	float2(-1, 0), float2(0, 0),  float2(-1, 1), float2(0, 1),
+#endif
+};
 
 
-s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
-{			
+s_ripple_interpolators ripple_apply_vs(
+#if DX_VERSION == 9
+	s_ripple_vertex_input _IN
+#elif DX_VERSION == 11
+	uint instance_id : SV_InstanceID,
+	uint vertex_id : SV_VertexID
+#endif
+)
+{
+#if (DX_VERSION == 9) && defined(pc)
+	s_ripple ripple = fetch_ripple_from_input(_IN);
+#elif DX_VERSION == 11
+	int ripple_index = instance_id / 4;
+	s_ripple ripple = vs_ripple_buffer[ripple_index];
+#else
 	// fetch ripple
-	int ripple_index= (IN.index + 0.5) / k_ripple_corners_number;	
+	int ripple_index= (_IN.index + 0.5) / k_ripple_corners_number;
 	s_ripple ripple= fetch_ripple(ripple_index);
-	
-	s_ripple_interpolators OUT;
+#endif
+
+	s_ripple_interpolators _OUT;
 	if (ripple.life > -0.1f)
-	{		
-		int corner_index= IN.index - ripple_index * k_ripple_corners_number;	
+	{
+#if (DX_VERSION == 9) && defined(pc)
+		int corner_index= _IN.index.x;
+#elif DX_VERSION == 11
+		int corner_index = vertex_id + ((instance_id & 3) * 4);
+#else
+		int corner_index= _IN.index - ripple_index * k_ripple_corners_number;
+#endif
+		float2 corner= k_ripple_corners[corner_index];
 
 		float3 shock_dir;
-		if ( length(ripple.shock) < 0.01f ) 
+		if ( length(ripple.shock) < 0.01f )
 		{
 			shock_dir= float3(1.0f, 0.0f, 0.0f);
 		}
@@ -415,7 +525,7 @@ s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
 			shock_dir= normalize(float3(ripple.shock, 0.0f));
 		}
 
-		float2 corner= k_ripple_corners[corner_index];
+
 
 		float2 position;
 		//position.x= -corner.x * shock_dir.x - corner.y * shock_dir.y;
@@ -424,18 +534,20 @@ s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
 		position.y= -corner.x * shock_dir.x - corner.y * shock_dir.y;
 		position.x= corner.x * shock_dir.y - corner.y * shock_dir.x;
 
-		position= position*ripple.size + ripple.position;		
+		position= position*ripple.size + ripple.position;
 
-		position= (position - k_vs_camera_position.xy) / k_ripple_buffer_radius;					
+		position= (position - k_vs_camera_position.xy) / k_ripple_buffer_radius;
 		float len= length(position);
-		position*= rsqrt(len);		
+		position*= rsqrt(len);
 
-		position+= k_view_dependent_buffer_center_shifting;		
+		position+= k_view_dependent_buffer_center_shifting;
 
 		float life_percent= max(ripple.life/ripple.duration, 0.0f);
 		float period_in_life= 1.0f - life_percent;
 		float pattern_index= lerp(ripple.pattern_start_index, ripple.pattern_end_index, evaluate_transition_internal(ripple.func_pattern, period_in_life));
+#if DX_VERSION == 9
 		pattern_index= (pattern_index+0.5f) / k_vs_ripple_pattern_count;
+#endif
 
 
 		float ripple_height;
@@ -447,17 +559,17 @@ s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
 		else
 		{
 			float descend_percentage= max(1.0f-ripple.rise_period, 0.0001f); // avoid to be divded by zero
-			ripple_height= life_percent * lerp(ripple.height, 0.0f, evaluate_transition_internal(ripple.func_descend, (period_in_life - ripple.rise_period)/descend_percentage));			
+			ripple_height= life_percent * lerp(ripple.height, 0.0f, evaluate_transition_internal(ripple.func_descend, (period_in_life - ripple.rise_period)/descend_percentage));
 		}
 
-		// calculate foam 
+		// calculate foam
 		float foam_opacity= 0.0f;
 		float foam_out_radius= 0.0f;
-		float foam_fade_distance= 0.0f; 
-		if (ripple.flag_foam && ripple.foam_life>0)		
+		float foam_fade_distance= 0.0f;
+		if (ripple.flag_foam && ripple.foam_life>0)
 		{
 			float period_in_foam_life= 1.0f - ripple.foam_life/ripple.foam_duration;
-			foam_opacity= lerp(1.0f, 0.0f, evaluate_transition_internal(ripple.func_foam, period_in_foam_life));						
+			foam_opacity= lerp(1.0f, 0.0f, evaluate_transition_internal(ripple.func_foam, period_in_foam_life));
 
 			// convert distances from object space into texture space
 			if (ripple.flag_foam_game_unit)
@@ -470,7 +582,7 @@ s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
 				foam_out_radius= ripple.foam_out_radius;
 				foam_fade_distance= ripple.foam_fade_distance;
 			}
-		}				
+		}
 
 		// calculate pendulum
 		if ( ripple.flag_pendulum )
@@ -479,51 +591,67 @@ s_ripple_interpolators ripple_apply_vs(s_ripple_vertex_input IN)
 		}
 		else
 		{
-			ripple.pendulum_phase= -1.0f;	
+			ripple.pendulum_phase= -1.0f;
 		}
 
 		// output
-		OUT.position= float4(position.xy, 0.0f, 1.0f);
-		OUT.texcoord= float4(corner*0.5f + 0.5f, pattern_index, ripple_height);
-		OUT.pendulum= float4(ripple.pendulum_phase, ripple.pendulum_repeat, 0.0f, 0.0f); 
-		OUT.foam= float4(foam_opacity, foam_out_radius, foam_fade_distance, 0.0f);
+		_OUT.position= float4(position, 0.0f, 1.0f);
+		_OUT.texcoord= float4(corner*0.5f + float2(0.5f, 0.5f), pattern_index, ripple_height);
+		_OUT.pendulum= float4(ripple.pendulum_phase, ripple.pendulum_repeat, 0.0f, 0.0f);
+		_OUT.foam= float4(foam_opacity, foam_out_radius, foam_fade_distance, 0.0f);
 
 	}
-	else 
+	else
 	{
-		OUT.position= 0.0f;	// invalidate position, kill primitive
-		OUT.texcoord= 0.0f;
-		OUT.pendulum= 0.0f;
-		OUT.foam= 0.0f;
+		_OUT.position= 0.0f;	// invalidate position, kill primitive
+		_OUT.texcoord= 0.0f;
+		_OUT.pendulum= 0.0f;
+		_OUT.foam= 0.0f;
 	}
-	return OUT;
+	return _OUT;
 }
 
-static const float2 k_screen_corners[4]= { 
-		float2(-1, -1), float2(1, -1), float2(1, 1), float2(-1, 1) };
+static const float2 k_screen_corners[4]=
+{
+	float2(-1, -1),
+	float2(1, -1),
+#if DX_VERSION == 9
+	float2(1, 1),
+	float2(-1, 1)
+#elif DX_VERSION == 11
+	float2(-1, 1),
+	float2(1, 1)
+#endif
+};
 
-s_ripple_interpolators ripple_slope_vs(s_ripple_vertex_input IN)
-{		
-	float2 corner= k_screen_corners[IN.index];
-
-	s_ripple_interpolators OUT;
-	OUT.position= float4(corner, 0, 1);
-	OUT.texcoord= float4(corner / 2 + 0.5, 0.0f, 0.0f);
-	OUT.pendulum= 0.0f;
-	OUT.foam= 0.0f;
-	return OUT;
+s_ripple_interpolators ripple_slope_vs(s_ripple_vertex_input _IN)
+{
+#if (DX_VERSION == 9) && defined(pc)
+	float2 corner= k_screen_corners[int(_IN.index.x)];
+#else
+	float2 corner= k_screen_corners[_IN.index];
+#endif
+	s_ripple_interpolators _OUT;
+	_OUT.position= float4(corner, 0, 1);
+	_OUT.texcoord= float4(corner / 2 + float2(0.5, 0.5), 0.0f, 0.0f);
+	_OUT.pendulum= 0.0f;
+	_OUT.foam= 0.0f;
+	return _OUT;
 }
 
-s_underwater_interpolators underwater_vs(s_ripple_vertex_input IN)
-{	
-	float2 corner= k_screen_corners[IN.index];
+s_underwater_interpolators underwater_vs(s_ripple_vertex_input _IN)
+{
+#if (DX_VERSION == 9) && defined(pc)
+	float2 corner= k_screen_corners[int(_IN.index.x)];
+#else
+	float2 corner= k_screen_corners[_IN.index];
+#endif
 
-	s_underwater_interpolators OUT;
-	OUT.position= float4(corner, 0, 1);
-	OUT.position_ss= OUT.position;
-	return OUT;
+	s_underwater_interpolators _OUT;
+	_OUT.position= float4(corner, 0, 1);
+	_OUT.position_ss= _OUT.position;
+	return _OUT;
 }
-
 
 #endif //VERTEX_SHADER
 
@@ -531,129 +659,165 @@ s_underwater_interpolators underwater_vs(s_ripple_vertex_input IN)
 
 #ifdef PIXEL_SHADER
 
+#if DX_VERSION == 9
 //	should never been executed
-float4 ripple_add_ps( void ) :COLOR0
+float4 ripple_add_ps( SCREEN_POSITION_INPUT(screen_position) ) : SV_Target
 {
 	return float4(0,1,2,3);
 }
 
 //	should never been executed
-float4 ripple_update_ps( void ) :COLOR0
+float4 ripple_update_ps( SCREEN_POSITION_INPUT(screen_position) ) : SV_Target
 {
 	return float4(0,1,2,3);
 }
+#endif
 
-float4 ripple_apply_ps( s_ripple_interpolators IN ) :COLOR0
-{	
-	//float height= tex3D(tex_ripple_pattern, IN.texcoord.xyz).r ;	
+float4 ripple_apply_ps( s_ripple_interpolators _IN ) : SV_Target
+{
+	//float height= sample3D(tex_ripple_pattern, _IN.texcoord.xyz).r ;
 	float4 height_tex;
-	float4 texcoord= IN.texcoord;
+	float4 texcoord= _IN.texcoord;
+#if (DX_VERSION == 9) && defined(pc)
+	height_tex = sample3D(tex_ripple_pattern, float4(texcoord.xyz, 0));
+#elif DX_VERSION == 11
+	float4 ripple_texcoord = convert_3d_texture_coord_to_array_texture(tex_ripple_pattern, texcoord.xyz);
+	height_tex = lerp(
+		tex_ripple_pattern.t.Sample(tex_ripple_pattern.s, ripple_texcoord.xyz),
+		tex_ripple_pattern.t.Sample(tex_ripple_pattern.s, ripple_texcoord.xyw),
+		frac(ripple_texcoord.z));
+#else
 	asm
 	{
 		tfetch3D height_tex, texcoord.xyz, tex_ripple_pattern, MagFilter= linear, MinFilter= linear, MipFilter= linear, VolMagFilter= linear, VolMinFilter= linear
 	};
-	float height= (height_tex.r - 0.5f) * IN.texcoord.w;				
-	
+#endif
+	float height= (height_tex.r - 0.5f) * _IN.texcoord.w;
+
 	// for pendulum
 	[branch]
-	if ( IN.pendulum.x > -0.01f)
+	if ( _IN.pendulum.x > -0.01f)
 	{
-		float2 direction= IN.texcoord.xy*2.0f - 1.0f;
-		float phase= IN.pendulum.x - length(direction) * IN.pendulum.y;
-		height*= cos(phase);	
+		float2 direction= _IN.texcoord.xy*2.0f - 1.0f;
+		float phase= _IN.pendulum.x - length(direction) * _IN.pendulum.y;
+		height*= cos(phase);
 	}
 
-	float4 OUT= 0.0f;	
-	OUT.r= height.r;
+	float4 _OUT= 0.0f;
+	_OUT.r= height.r;
 
 	// for foam
 	[branch]
-	if ( IN.foam.x > 0.01f )
+	if ( _IN.foam.x > 0.01f )
 	{
-		float2 direction= IN.texcoord.xy*2.0f - 1.0f;
+		float2 direction= _IN.texcoord.xy*2.0f - 1.0f;
 		float distance= length(direction);
 
-		distance= max(IN.foam.y - distance, 0.0f);
-		float edge_fade= min( distance/max(IN.foam.z, 0.001f), 1.0f);
-		OUT.g= edge_fade * IN.foam.x * height_tex.a;			
-	}	
+		distance= max(_IN.foam.y - distance, 0.0f);
+		float edge_fade= min( distance/max(_IN.foam.z, 0.001f), 1.0f);
+		_OUT.g= edge_fade * _IN.foam.x * height_tex.a;
+	}
 
-	return OUT;
+	return _OUT;
 }
 
-float4 ripple_slope_ps( s_ripple_interpolators IN ) :COLOR0
-{	
-	float4 OUT= float4(0.5f, 0.5f, 0.5f, 0.0f);
-	float4 texcoord= IN.texcoord;
+float4 ripple_slope_ps( s_ripple_interpolators _IN ) : SV_Target
+{
+	float4 _OUT= float4(0.5f, 0.5f, 0.5f, 0.0f);
+	float4 texcoord= _IN.texcoord;
 	float4 tex_x1_y1;
+#ifdef pc
+	tex_x1_y1 = sample2D(tex_ripple_buffer_height, float4(texcoord.xy, 0, 0));
+#else
 	asm{ tfetch2D tex_x1_y1, texcoord, tex_ripple_buffer_height, MagFilter= point, MinFilter= point };
+#endif
 
 	//[branch]
 	//if ( tex_x1_y1.a > 0.1f )
 	{
 		float4 tex_x2_y1, tex_x1_y2;
+#ifdef pc
+		tex_x2_y1 = sample2D(tex_ripple_buffer_height, float4(texcoord.x + 1.0/800.0, texcoord.y, 0, 0));
+		tex_x1_y2 = sample2D(tex_ripple_buffer_height, float4(texcoord.x, texcoord.y + 1.0/800.0, 0, 0));
+#else
 		asm{ tfetch2D tex_x2_y1, texcoord, tex_ripple_buffer_height, OffsetX= 1.0f, MagFilter= point, MinFilter= point };
 		asm{ tfetch2D tex_x1_y2, texcoord, tex_ripple_buffer_height, OffsetY= 1.0f, MagFilter= point, MinFilter= point };
+#endif
 
 		float2 slope;
 		slope.x= tex_x2_y1.r - tex_x1_y1.r;
 		slope.y= tex_x1_y2.r - tex_x1_y1.r;
-	   
-		// Scale to [0 .. 1]		
+
+		// Scale to [0 .. 1]
 		slope= saturate(slope * 0.5f + 0.5f);
-		
+
 		float4 org_OUT;
 		org_OUT.r= saturate( (tex_x1_y1.r + 1.0f) * 0.5f );
 		org_OUT.g= slope.x;
 		org_OUT.b= slope.y;
 		org_OUT.a= tex_x1_y1.g;
 
-		// damping the brim	
-		float2 distance_to_brim= saturate(100.0f *(0.497f - abs(IN.texcoord.xy-0.5f)));
+		// damping the brim
+		float2 distance_to_brim= saturate(100.0f *(0.497f - abs(_IN.texcoord.xy-0.5f)));
 		float lerp_weight= min(distance_to_brim.x, distance_to_brim.y);
-		OUT= lerp(OUT, org_OUT, lerp_weight);
+		_OUT= lerp(_OUT, org_OUT, lerp_weight);
 	}
-	
-	return OUT;
+
+	return _OUT;
 }
 
-float compute_fog_factor( 
+float compute_fog_factor(
 			float murkiness,
 			float depth)
 {
-//	return 1.0f - saturate(1.0f / exp(murkiness * depth));	
-	return 1.0f - saturate(exp2(-murkiness * depth));	
+//	return 1.0f - saturate(1.0f / exp(murkiness * depth));
+	return 1.0f - saturate(exp2(-murkiness * depth));
 }
 
 
 accum_pixel underwater_ps( s_underwater_interpolators INTERPOLATORS )
-{	
-	float3 output_color= 0;	
+{
+	float3 output_color= 0;
 
 	// calcuate texcoord in screen space
 	INTERPOLATORS.position_ss/= INTERPOLATORS.position_ss.w;
+
+#if DX_VERSION == 9
 	float2 texcoord_ss= INTERPOLATORS.position_ss.xy;
 	texcoord_ss= texcoord_ss / 2 + 0.5;
 	texcoord_ss.y= 1 - texcoord_ss.y;
-	texcoord_ss= k_ps_water_player_view_constant.xy + texcoord_ss*k_ps_water_player_view_constant.zw;
+	texcoord_ss= k_water_player_view_constant.xy + texcoord_ss*k_water_player_view_constant.zw;
+#endif
 
 	// get pixel position in world space
 	float distance= 0.0f;
-	
-	float pixel_depth= tex2D(tex_depth_buffer, texcoord_ss).r;		
-	float4 pixel_position= float4(INTERPOLATORS.position_ss.xy, pixel_depth, 1.0f);		
-	pixel_position= mul(pixel_position, k_ps_water_view_xform_inverse);
+
+#if DX_VERSION == 9
+	float pixel_depth= sample2D(tex_depth_buffer, texcoord_ss).r;
+#elif DX_VERSION == 11
+	int3 iscreen_pos = int3(INTERPOLATORS.position.xy, 0);
+	float pixel_depth = tex_depth_buffer.t.Load(iscreen_pos).r;
+#endif
+
+	float4 pixel_position= float4(INTERPOLATORS.position_ss.xy, pixel_depth, 1.0f);
+	pixel_position= mul(pixel_position, k_water_view_xform_inverse);
 	pixel_position.xyz/= pixel_position.w;
-	distance= length(k_ps_camera_position - pixel_position.xyz);	
+	distance= length(k_ps_camera_position - pixel_position.xyz);
 
 	// get pixel color
-	float3 pixel_color= tex2D(tex_ldr_buffer, texcoord_ss).rgb;
+#if DX_VERSION == 9
+	float3 pixel_color= sample2D(tex_ldr_buffer, texcoord_ss).rgb;
+#elif DX_VERSION == 11
+	float3 pixel_color = tex_ldr_buffer.t.Load(iscreen_pos).rgb;
+#endif
+#ifdef xenon
 	pixel_color.rgb= (pixel_color.rgb < (1.0f/(16.0f*16.0f))) ? pixel_color.rgb : (exp2(pixel_color.rgb * (16 * 8) - 8));
+#endif
 
 	// calc under water fog
-	float transparence= 0.5f * saturate(1.0f - compute_fog_factor(k_ps_underwater_murkiness, distance));						
-	output_color= lerp(k_ps_underwater_fog_color*g_exposure.r, pixel_color, transparence);		
-	
+	float transparence= 0.5f * saturate(1.0f - compute_fog_factor(k_ps_underwater_murkiness, distance));
+	output_color= lerp(k_ps_underwater_fog_color*g_exposure.r, pixel_color, transparence);
+
 	return convert_to_render_target(float4(output_color, 1.0f), true, true);
 }
 
@@ -661,82 +825,83 @@ accum_pixel underwater_ps( s_underwater_interpolators INTERPOLATORS )
 
 
 
-#else /* implementation of pc version */
-
-struct s_ripple_interpolators
-{
-	float4 position	:POSITION0;
-};
-
-s_ripple_interpolators ripple_add_vs()
-{
-	s_ripple_interpolators OUT;
-	OUT.position= 0.0f;
-	return OUT;
-}
-
-s_ripple_interpolators ripple_update_vs()
-{
-	s_ripple_interpolators OUT;
-	OUT.position= 0.0f;
-	return OUT;
-}
-
-s_ripple_interpolators ripple_apply_vs()
-{
-	s_ripple_interpolators OUT;
-	OUT.position= 0.0f;
-	return OUT;
-}
-
-s_ripple_interpolators ripple_slope_vs()
-{
-	s_ripple_interpolators OUT;
-	OUT.position= 0.0f;
-	return OUT;
-}
-
-s_ripple_interpolators underwater_vs()
-{
-	s_ripple_interpolators OUT;
-	OUT.position= 0.0f;
-	return OUT;
-}
-
-
-float4 ripple_add_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
-{
-	return float4(0,1,2,3);
-}
-
-float4 ripple_update_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
-{
-	return float4(0,1,2,3);
-}
-
-float4 ripple_apply_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
-{
-	return float4(0,1,2,3);
-}
-
-float4 ripple_slope_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
-{
-	return float4(0,1,2,3);
-}
-
-float4 underwater_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
-{
-	return float4(0,1,2,3);
-}
-
-#endif //pc/xenon
+// #else /* implementation of pc version */
+//
+// struct s_ripple_interpolators
+// {
+// 	float4 position	:POSITION0;
+// };
+//
+// s_ripple_interpolators ripple_add_vs()
+// {
+// 	s_ripple_interpolators OUT;
+// 	OUT.position= 0.0f;
+// 	return OUT;
+// }
+//
+// s_ripple_interpolators ripple_update_vs()
+// {
+// 	s_ripple_interpolators OUT;
+// 	OUT.position= 0.0f;
+// 	return OUT;
+// }
+//
+// s_ripple_interpolators ripple_apply_vs()
+// {
+// 	s_ripple_interpolators OUT;
+// 	OUT.position= 0.0f;
+// 	return OUT;
+// }
+//
+// s_ripple_interpolators ripple_slope_vs()
+// {
+// 	s_ripple_interpolators OUT;
+// 	OUT.position= 0.0f;
+// 	return OUT;
+// }
+//
+// s_ripple_interpolators underwater_vs()
+// {
+// 	s_ripple_interpolators OUT;
+// 	OUT.position= 0.0f;
+// 	return OUT;
+// }
+//
+//
+// float4 ripple_add_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
+// {
+// 	return float4(0,1,2,3);
+// }
+//
+// float4 ripple_update_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
+// {
+// 	return float4(0,1,2,3);
+// }
+//
+// float4 ripple_apply_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
+// {
+// 	return float4(0,1,2,3);
+// }
+//
+// float4 ripple_slope_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
+// {
+// 	return float4(0,1,2,3);
+// }
+//
+// float4 underwater_ps(s_ripple_interpolators INTERPOLATORS) :COLOR0
+// {
+// 	return float4(0,1,2,3);
+// }
+//
+// #endif //pc/xenon
 
 // end of rename marco
 #undef ripple_update_vs
 #undef ripple_update_ps
-#undef ripple_apply_vs	
-#undef ripple_apply_ps	
-#undef ripple_slope_vs	
-#undef ripple_slope_ps	
+#undef ripple_update_cs
+#undef ripple_apply_vs
+#undef ripple_apply_ps
+#undef ripple_slope_vs
+#undef ripple_slope_ps
 #undef underwater_vs
 #undef underwater_ps

@@ -17,9 +17,8 @@ float sample_percentage_closer_PCF_5x5_block_predicated(float3 fragment_shadow_p
 	float4 blend;
 
 #ifdef pc
-	fragment_shadow_position.xy= (fragment_shadow_position.xy * 480.0f);
-//	float2 texel1= floor(fragment_shadow_position.xy);
-	blend.xy= fragment_shadow_position.xy - floor(fragment_shadow_position.xy);			// bilinear-sampled filter
+   float2 frac_pos = fragment_shadow_position.xy / pixel_size + float2(0.5f, 0.5f);
+   blend.xy = frac(frac_pos);
 #else
 #ifndef VERTEX_SHADER
 	fragment_shadow_position.xy += 0.5f;

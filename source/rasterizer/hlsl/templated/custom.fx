@@ -1,6 +1,7 @@
 // .custom is basically the same as .shader, except it doesn't support cook-torrance
 
 
+#include "hlsl_constant_globals.fx"
 #include "templated\templated_globals.fx"
 
 #include "shared\utilities.fx"

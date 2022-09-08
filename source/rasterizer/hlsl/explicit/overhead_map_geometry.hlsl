@@ -3,20 +3,14 @@
 #define SCOPE_MESH_DEFAULT
 #include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
+#include "explicit\overhead_map_geometry_registers.fx"
 
 //@generate world
 //@generate rigid
 
-VERTEX_CONSTANT(float4, map_override, c19);
-VERTEX_CONSTANT(float4, map_transform1, c20);
-VERTEX_CONSTANT(float4, map_transform2, c21);
-VERTEX_CONSTANT(float4, map_transform3, c22);
-PIXEL_CONSTANT(float4, map_sphere, c23);
-PIXEL_CONSTANT(float4, blend_factor, c24);
-
 struct overhead_map_output
 {
-	float4 HPosition	:POSITION;
+	float4 HPosition	:SV_Position;
 	float3 PosWorld		:POSITION2;
     float3 Color		:COLOR0;
 };
@@ -59,7 +53,7 @@ overhead_map_output default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-float4 default_ps(overhead_map_output IN) : COLOR
+float4 default_ps(overhead_map_output IN) : SV_Target
 {
 	//float pixel_to_center_distance= distance(float3(12.60, 2.17, -6.92), IN.PosWorld);
 	float pixel_to_center_distance= distance(map_sphere, IN.PosWorld);

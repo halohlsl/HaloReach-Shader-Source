@@ -2,34 +2,27 @@
 
 //#define USE_CUSTOM_POSTPROCESS_CONSTANTS
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
+#include "explicit\copy_target_registers.fx"
+
 //@generate screen
 
-sampler2D surface_sampler : register(s0);
-sampler2D dark_surface_sampler : register(s1);
+LOCAL_SAMPLER_2D(surface_sampler, 0);
+LOCAL_SAMPLER_2D(dark_surface_sampler, 1);
 
-sampler2D bloom_sampler : register(s2);
+LOCAL_SAMPLER_2D(bloom_sampler, 2);
 #ifdef pc
-sampler2D bling_sampler : register(s3);
-sampler2D persist_sampler : register(s4);
+LOCAL_SAMPLER_2D(bling_sampler, 3);
+LOCAL_SAMPLER_2D(persist_sampler, 4);
 #else
-sampler2D depth_sampler : register(s3);
-sampler2D blur_sampler : register(s4);
+LOCAL_SAMPLER_2D(depth_sampler, 3);
+LOCAL_SAMPLER_2D(blur_sampler, 4);
 #endif
 
 //sampler3D test_sampler : register(s5);			// ###ctchou $REMOVE $DEBUG
-
-//PIXEL_CONSTANT(float2, pixel_size, c0);				// texcoord size of a single pixel (1 / (width), 1/(height))
-PIXEL_CONSTANT(float4, intensity, POSTPROCESS_DEFAULT_PIXEL_CONSTANT);		// natural, bloom, bling, persist
-
-//PIXEL_CONSTANT(float4, test, c2);					// ###ctchou $REMOVE $DEBUG
-//PIXEL_CONSTANT(float3, origin, c3);				// ###ctchou $REMOVE $DEBUG
-//PIXEL_CONSTANT(float3, x_axis, c4);				// ###ctchou $REMOVE $DEBUG
-//PIXEL_CONSTANT(float3, y_axis, c5);				// ###ctchou $REMOVE $DEBUG
-
-PIXEL_CONSTANT(float4, tone_curve_constants, POSTPROCESS_EXTRA_PIXEL_CONSTANT_0);	// max, linear, quadratic, cubic terms
 
 
 float3 get_pixel_bilinear_bloom(float2 tex_coord)
@@ -54,7 +47,7 @@ PIXEL_CONSTANT(float4, depth_constants, c3);		// 1/near,  -(far-near)/(far*near)
 float4 poisson_DOF_filter(float2 vTexCoord)
 {
 	static const int NUM_POISSON_TAPS = 8;
-	static const float2 g_Poisson[8] = 
+	static const float2 g_Poisson[8] =
 	{
 	    float2( 0.000000f, 0.000000f ),
 	    float2( 0.527837f,-0.085868f ),
@@ -79,24 +72,24 @@ float4 poisson_DOF_filter(float2 vTexCoord)
 
 	float target_depth= depth_constants.z;
 	float relative_depth= (fCenterDepth - target_depth);
-	
+
     // Convert depth into blur radius in pixels
 //    float fDiscRadius = abs( fCenterDepth * g_vMaxCoC.y - g_vMaxCoC.x );
 	float fDiscRadius= min(abs(relative_depth * depth_constants.w * 5.0f), 5.0f);
 //	return fDiscRadius * intensity.z;
-    
+
     // Compute disc radius on low-res image
     float fDiscRadiusLow = fDiscRadius * 0.125f; // g_fRadiusScale;						// why does it pull the disc radius in for blurry samples??
-    
+
     // Accumulate output color across all taps
     vOutColor = 0;
-    
+
     for( int t=0; t<NUM_POISSON_TAPS; t++ )
     {
         // Fetch lo-res tap
         float2 vCoordLow = vTexCoord + (pixel_size.xy * g_Poisson[t] * fDiscRadiusLow );
         float4 vTapLow   = tex2D( blur_sampler, vCoordLow );
-        
+
         // Fetch hi-res tap
         float2 vCoordHigh = vTexCoord + (pixel_size.zw * g_Poisson[t] * fDiscRadius );
         float4 vTapHigh   = tex2D( surface_sampler, vCoordHigh );
@@ -105,35 +98,35 @@ float4 poisson_DOF_filter(float2 vTexCoord)
 
         // Put tap bluriness into [0,1] range
         float fTapBlur = min(abs( (vTapDepth-target_depth) * depth_constants.w), 1.0f);
-        
+
         // Mix lo-res and hi-res taps based on bluriness
 //        float4 vTap = vTapHigh;
 //		vTapHigh.rb= 0.0f;
 //		vTapLow.g= 0.0f;
 		float4 vTap= lerp( vTapHigh, vTapLow, fTapBlur * fTapBlur );				// blurry samples use blurry buffer,  sharp samples use sharp buffer
-        
+
         // Apply leaking reduction: lower weight for taps that are closer than the
         // center tap and in focus
 //        vTap.a = ( vTap.a >= fCenterDepth ) ? 1.0f : abs( vTap.a * 2.0f - 1.0f );
 		float vTapWeight = (vTapDepth >= fCenterDepth ) ? 1.0f : fTapBlur;		// reduces weight of sharp samples in front of target pixel (so sharp samples don't blur into background)
-        
+
         // Accumumate
         vOutColor.rgb += vTap.rgb * vTapWeight;
         vOutColor.a   += vTapWeight;
     }
     // Normalize and return result
-    return ( vOutColor / vOutColor.a ); 
+    return ( vOutColor / vOutColor.a );
 }
 */
 #endif
- 
+
 // pixel fragment entry points
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 #ifdef pc
-	float4 accum=		tex2D(surface_sampler, IN.texcoord);
-	float4 accum_dark=	tex2D(dark_surface_sampler, IN.texcoord);
-	
+	float4 accum=		sample2D(surface_sampler, IN.texcoord);
+	float4 accum_dark=	sample2D(dark_surface_sampler, IN.texcoord);
+
 	float3 combined= max(accum, accum_dark);			// convert_from_render_targets <-- for some reason this isn't optimized very well
 
 	float3 bloom= get_pixel_bilinear_bloom(IN.texcoord);
@@ -145,12 +138,12 @@ float4 default_ps(screen_output IN) : COLOR
 					intensity.z * bling +
 					intensity.w * persist;
 #else // xenon
-	float4 accum=		tex2D(surface_sampler, IN.texcoord);
-	float4 accum_dark=	tex2D(dark_surface_sampler, IN.texcoord);
+	float4 accum=		sample2D(surface_sampler, IN.texcoord);
+	float4 accum_dark=	sample2D(dark_surface_sampler, IN.texcoord);
 	float3 combined= max(accum, accum_dark);			// convert_from_render_targets <-- for some reason this isn't optimized very well
 
 //	float4 combined= poisson_DOF_filter(IN.texcoord);
-	
+
 	float3 postprocess_result= tex2D_offset(bloom_sampler, IN.texcoord, 0, 0);
 
 	float3 blend= combined * intensity.x + postprocess_result * intensity.y;
@@ -159,7 +152,7 @@ float4 default_ps(screen_output IN) : COLOR
 /*	sample0= sample0*2 - 1;
 	sample0.y = sample0.y * (720.0/1280.0);
 	sample0 *= sample0;
-	
+
 	float radius= sqrt(sample0.x + sample0.y);		// vignetting
 	radius= max(0.0, radius-0.7);
 	radius *= radius;
@@ -175,7 +168,7 @@ float4 default_ps(screen_output IN) : COLOR
 	clamped= max(clamped, 0.000000001f);
 	float3 clamped2 = clamped * clamped;
 	float3 clamped3 = clamped2 * clamped;
-	
+
 	float4 result;
 	result.rgb= clamped.rgb * tone_curve_constants.y + clamped2.rgb * tone_curve_constants.z + clamped3.rgb * tone_curve_constants.w;		// default linear = 1.0041494251232542828239889869599, quadratic= 0, cubic= - 0.15;
 	result.a= 1.0f;

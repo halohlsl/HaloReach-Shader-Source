@@ -10,7 +10,7 @@
 //		rotating a point by a quaternion is 8 instructions (as opposed to 3 instructions for a matrix rotation)
 //
 
-#ifdef pc
+#if defined(pc) || (DX_VERSION == 11)
 #define QUATERNIONS_USE_UNOPTIMIZED_HLSL
 #endif
 
@@ -22,7 +22,7 @@ float4 quaternion_multiply(float4 q0, float4 q1)		// multiplies q0 by q1   (quat
 #ifdef QUATERNIONS_USE_UNOPTIMIZED_HLSL
 	result = float4(cross(q0.xyz, q1.xyz),							// crs result.xyz_, q0.xyz ,  q1.xyz
 			-dot(q0.xyz, q1.xyz));									// dp3 result.___w, q0.xyz , -q1.xyz
-	result.xyz  += q0.w * q1.xyz;									// mad result.xyz_, q0.www ,  q1.xyz ,  result.xyz 
+	result.xyz  += q0.w * q1.xyz;									// mad result.xyz_, q0.www ,  q1.xyz ,  result.xyz
 	result.xyzw += q1.w * q0.xyzw;									// mad result.xyzw, q1.wwww,  q0.xyzw,  result.xyzw
 #else
 
@@ -43,7 +43,7 @@ float4 quaternion_multiply(float4 q0, float4 q1)		// multiplies q0 by q1   (quat
 float4 quaternion_multiply_conjugate(float4 q0, float4 q1)	// multiplies q0 by the conjugate of q1
 {
 	float4 result;
-	
+
 #ifdef QUATERNIONS_USE_UNOPTIMIZED_HLSL
 	result= quaternion_multiply(q0, float4(-q1.xyz, q1.w));
 #else
@@ -54,7 +54,7 @@ float4 quaternion_multiply_conjugate(float4 q0, float4 q1)	// multiplies q0 by t
 		mul result.xyz,		q0.zxy,			-q1.yzx						// cross part 1
 		mad result.xyz,		q0.yzx,			-q1.zxy,	-result.xyz		// cross part 2
 		mad result.xyz,		q0.w,			-q1.xyz,	 result.xyz
-		mad result,			q1.w,			 q0,		 result		
+		mad result,			q1.w,			 q0,		 result
 	};
 #endif
 
@@ -68,7 +68,7 @@ float3 quaternion_transform_point(float4 q, float3 pt)		// transform point pt by
 
 #ifdef QUATERNIONS_USE_UNOPTIMIZED_HLSL
 	result= quaternion_multiply_conjugate(float4(pt, 0), q);			// pt' = q pt q'
-	result= quaternion_multiply(q, result);	
+	result= quaternion_multiply(q, result);
 #else
 
 	// compiler really fucks up this one if I don't give it the assembly...

@@ -1,10 +1,10 @@
-
+#include "hlsl_constant_globals.fx"
 
 #include "templated\templated_globals.fx"
 
 
 #include "shared\utilities.fx"
-#include "templated\deform_tessellation.fx" 
+#include "templated\deform_tessellation.fx"
 
 #include "shared\texture_xform.fx"
 

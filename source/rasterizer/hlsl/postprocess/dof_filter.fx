@@ -2,18 +2,18 @@
 #define __DOF_FILTER_FX
 
 
-float4 simple_DOF_filter(float2 vTexCoord, sampler2D original_sampler, bool original_gamma2, sampler2D blurry_sampler, sampler2D zbuffer_sampler)
+float4 simple_DOF_filter(float2 vTexCoord, texture_sampler_2d original_sampler, bool original_gamma2, texture_sampler_2d blurry_sampler, texture_sampler_2d zbuffer_sampler)
 {
 	// Fetch high and low resolution taps
-	float4 vTapLow=		tex2D( blurry_sampler,	vTexCoord - (pixel_size.zw - pixel_size.xy) * 0.0f);
-	float4 vTapHigh=	tex2D( original_sampler, vTexCoord ) * DARK_COLOR_MULTIPLIER;
+	float4 vTapLow=		sample2D( blurry_sampler,	vTexCoord - (pixel_size.zw - pixel_size.xy) * 0.0f);
+	float4 vTapHigh=	sample2D( original_sampler, vTexCoord ) * DARK_COLOR_MULTIPLIER;
 	if (original_gamma2)
 	{
 		vTapHigh.rgb *= vTapHigh.rgb;
 	}
 
 	// get pixel depth, and calculate blur amount
-	float fCenterDepth = tex2D( zbuffer_sampler, vTexCoord ).r;
+	float fCenterDepth = sample2D( zbuffer_sampler, vTexCoord ).r;
 	fCenterDepth= 1.0f / (DEPTH_BIAS + fCenterDepth * DEPTH_SCALE);					// convert to real depth
 	float fTapBlur = min(max(abs(fCenterDepth-FOCUS_DISTANCE)-FOCUS_HALF_WIDTH, 0.0f)*APERTURE, MAX_BLUR_BLEND);
 

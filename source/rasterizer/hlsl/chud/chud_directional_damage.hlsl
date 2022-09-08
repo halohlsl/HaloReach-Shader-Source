@@ -78,7 +78,7 @@ float get_screen_flash_alpha(
 
 // pixel fragment entry points
 float4 default_ps(
-	chud_output IN) : COLOR
+	chud_output IN) : SV_Target
 {
 	float4 result=		handle_screen_flash(IN.Texcoord.xy, chud_screen_flash0_data, chud_screen_flash0_color, chud_screen_flash0_scale);
 	result	+=			handle_screen_flash(IN.Texcoord.xy, chud_screen_flash1_data, chud_screen_flash1_color, chud_screen_flash1_scale);

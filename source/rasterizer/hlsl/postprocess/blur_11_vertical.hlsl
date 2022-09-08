@@ -1,14 +1,15 @@
 //#line 2 "source\rasterizer\hlsl\blur_11_vertical.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D target_sampler : register(s0);
+LOCAL_SAMPLER_2D(target_sampler, 0);
 //float4 kernel[11] : register(c2);		// c2 through c12 are the kernel (r,g,b)
 
-fast4 default_ps(screen_output IN) : COLOR
+fast4 default_ps(screen_output IN) : SV_Target
 {
 	float2 sample= IN.texcoord;
 /*
@@ -17,7 +18,7 @@ fast4 default_ps(screen_output IN) : COLOR
 	fast3 color= 0.0;
 	for (int y= 0; y < 11; y++)
 	{
-		color += kernel[y].rgb * convert_from_bloom_buffer(tex2D(target_sampler, sample));
+		color += kernel[y].rgb * convert_from_bloom_buffer(sample2D(target_sampler, sample));
 		sample.y += pixel_size.y;
 	}
 */
@@ -65,7 +66,7 @@ fast4 default_ps(screen_output IN) : COLOR
 	// Note:  with the half-pixel offset in the other direction, this kernel becomes:
 	//
 	//		1  10  45  120  210  252  210  120  45  10  1			/ 1024
-	
+
 	const float2 offset[5]=
 		{
 			{0.5,	-4.0 - 1.0 /(1.0+9.0)			},			// -4.1
@@ -74,12 +75,12 @@ fast4 default_ps(screen_output IN) : COLOR
 			{0.5,	+2.0 - 84.0/(84.0+36.0)			},			// +1.3
 			{0.5,	+4.0 - 9.0/(1.0+9.0)			}			// +3.1
 		};
-	
-	float4 color=	(1.0   + 9.0)	* tex2D(target_sampler, sample + offset[0] * pixel_size) +
-					(36.0  + 84.0)	* tex2D(target_sampler, sample + offset[1] * pixel_size) +
-					(126.0 + 126.0)	* tex2D(target_sampler, sample + offset[2] * pixel_size) +
-					(84.0  + 36.0)	* tex2D(target_sampler, sample + offset[3] * pixel_size) +
-					(1.0   + 9.0)	* tex2D(target_sampler, sample + offset[4] * pixel_size);
+
+	float4 color=	(1.0   + 9.0)	* sample2D(target_sampler, sample + offset[0] * pixel_size) +
+					(36.0  + 84.0)	* sample2D(target_sampler, sample + offset[1] * pixel_size) +
+					(126.0 + 126.0)	* sample2D(target_sampler, sample + offset[2] * pixel_size) +
+					(84.0  + 36.0)	* sample2D(target_sampler, sample + offset[3] * pixel_size) +
+					(1.0   + 9.0)	* sample2D(target_sampler, sample + offset[4] * pixel_size);
 
 	return color / 512.0;
 }

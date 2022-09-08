@@ -55,13 +55,13 @@ chud_output default_vs(vertex_type IN)
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 #ifndef pc
 	asm{
 	tfetch2D bitmap_result, texcoord, basemap_sampler, MinFilter=linear, MagFilter=linear
 	};
 #else
-	bitmap_result= tex2D(basemap_sampler, texcoord);
+	bitmap_result= sample2D(basemap_sampler, texcoord);
 #endif
 
 	float4 result;
@@ -93,7 +93,7 @@ float2 build_subsample_texcoord(float2 texcoord, float4 gradients, float dh, flo
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 #ifndef pc
 	float4 gradients;

@@ -8,44 +8,31 @@ Shaders for contrail spawning
 
 #include "hlsl_constant_globals.fx"
 
-#ifdef VERTEX_SHADER
+#if DX_VERSION == 11
+// @compute_shader
+#endif
+
+#if ((DX_VERSION == 9) && defined(VERTEX_SHADER)) || ((DX_VERSION == 11) && defined(COMPUTE_SHADER))
 
 #define MEMEXPORT_ENABLED 1
 
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
-
 #include "hlsl_vertex_types.fx"
 #include "effects\contrail_spawn_registers.fx"	// must come before contrail_common.fx
-#include "effects\contrail_common.fx"
+#include "effects\contrail_registers.fx"
+#include "effects\contrail_profile.fx"
 
 //This comment causes the shader compiler to be invoked for certain types
 //@generate contrail
 
-#ifndef pc
-float4 contrail_main( vertex_type IN ) :POSITION
+#if !defined(pc)
+float4 contrail_main( vertex_type IN ) : SV_Position
 {
 	s_profile_state STATE= read_profile_state(IN.index);
 	int out_index= IN.address.x + IN.address.y * g_buffer_dims.x;
 	write_profile_state(STATE, out_index);
+	//return float4(1, 2, 3, 4);
 }
-#endif
 
-#ifdef pc
-float4 default_vs( vertex_type IN ) :POSITION
-{
-	return float4(1, 2, 3, 4);
-}
-#else
 void default_vs( vertex_type IN )
 {
 //	asm {
@@ -53,12 +40,32 @@ void default_vs( vertex_type IN )
 //	};
 	contrail_main(IN);
 }
+#elif DX_VERSION == 11
+[numthreads(CS_CONTRAIL_SPAWN_THREADS,1,1)]
+void default_cs(in uint raw_index : SV_DispatchThreadID)
+{
+	uint index = raw_index + contrail_index_range.x;
+	if (index < contrail_index_range.y)
+	{
+		uint packed_address = cs_contrail_address_buffer[index];
+
+		uint out_index = (packed_address & 0xffff) + ((packed_address >> 16) * g_buffer_dims.x);
+		cs_contrail_profile_state_buffer[out_index] = cs_contrail_profile_state_spawn_buffer[index];
+	}
+}
+#else
+float4 default_vs( vertex_type IN ) : SV_Position
+{
+	return float4(1, 2, 3, 4);
+}
 #endif
 
 #endif //VERTEX_SHADER
 
+#if DX_VERSION == 9
 // Should never be executed
-float4 default_ps( void ) :COLOR0
+float4 default_ps( SCREEN_POSITION_INPUT(screen_position) ) : SV_Target0
 {
 	return float4(0,1,2,3);
 }
+#endif

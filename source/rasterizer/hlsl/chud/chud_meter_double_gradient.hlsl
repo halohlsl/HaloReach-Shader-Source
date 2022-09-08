@@ -22,7 +22,7 @@
 // color output B= record meter color
 // color output C= chapter color
 // color output D= buffer'd theta color
-// 
+//
 // ---- SCALAR OUTPUTS
 // scalar output A= meter amount
 // scalar output B= meter max
@@ -56,7 +56,7 @@ float get_overlap(float t, float min, float max)
 	float above_min= step(min, t);
 	float below_max= step(t, max);
 
-	return above_min*below_max;	
+	return above_min*below_max;
 }
 
 float get_chapter_overlap(float t_min, float t_max, float4 chapvec)
@@ -66,7 +66,7 @@ float get_chapter_overlap(float t_min, float t_max, float4 chapvec)
 	float4 above_min= step(tvec_min, chapvec);
 	float4 below_max= step(chapvec, tvec_max);
 
-	return dot(above_min*below_max, float4(1,1,1,1));	
+	return dot(above_min*below_max, float4(1,1,1,1));
 }
 
 float get_cusp_fade(float t_val, float min, float max)
@@ -76,7 +76,7 @@ float get_cusp_fade(float t_val, float min, float max)
 	float in_range= above_min*below_max;
 	float range_t= 1.0 - pow((t_val - min)/(max - min), 1.5);
 
-	return in_range*range_t + (1.0-in_range); 	
+	return in_range*range_t + (1.0-in_range);
 }
 
 #define record_min chud_savedfilm_data1.x
@@ -85,13 +85,13 @@ float get_cusp_fade(float t_val, float min, float max)
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 #ifndef pc
 	asm{
 		tfetch2D bitmap_result, texcoord, basemap_sampler, MinFilter=linear, MagFilter=linear
 	};
 #else
-	bitmap_result= tex2D(basemap_sampler, texcoord);
+	bitmap_result= sample2D(basemap_sampler, texcoord);
 #endif
 
 	float chapter_size= 1.0/chud_scalar_output_ABCD.x;
@@ -128,7 +128,7 @@ float2 build_subsample_texcoord(float2 texcoord, float4 gradients, float dh, flo
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 #ifndef pc
 	float4 gradients;
@@ -137,7 +137,7 @@ accum_pixel default_ps(chud_output IN) : COLOR
 	{
 		[isolate]		// ###ctchou $TODO this isolate is to work around a bug in the HLSL compiler crashing when it tries to optimize this instruction.   it should be fixed in future releases and we can remove this line
 		asm {
-			getGradients gradients, texcoord, basemap_sampler 
+			getGradients gradients, texcoord, basemap_sampler
 		};
 	}
 
@@ -149,7 +149,7 @@ accum_pixel default_ps(chud_output IN) : COLOR
 	result /= 4.0;
 	result.a*=chud_scalar_output_EF.w;
 #else // pc
-	float4 result= float4(0,0,0,0);
+	float4 result= build_subpixel_result(IN.Texcoord);
 #endif // pc
 
 	return chud_compute_result_pixel(result);

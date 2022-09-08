@@ -1,12 +1,13 @@
 //#line 1 "source\rasterizer\hlsl\white.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 
 //@generate screen
 
 struct screen_output
 {
-	float4 HPosition	:POSITION;
+	float4 HPosition	:SV_Position;
     float2 Texcoord		:TEXCOORD0;
     float3 color		:COLOR0;
 };
@@ -25,7 +26,7 @@ screen_output default_vs(vertex_type IN)
 
 // pixel fragment entry points
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
     return float4(1.0f, 1.0f, 1.0f, 1.0f);
 }

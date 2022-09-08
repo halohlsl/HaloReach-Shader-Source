@@ -7,8 +7,8 @@
 #define ALPHA_TEST_multmap 2
 
 
-sampler alpha_test_map;
-float4 alpha_test_map_xform;
+PARAM_SAMPLER_2D(alpha_test_map);
+PARAM(float4, alpha_test_map_xform);
 
 float calc_alpha_test_off_ps(
 	in float2 texcoord)
@@ -19,7 +19,7 @@ float calc_alpha_test_off_ps(
 float calc_alpha_test_on_ps(
 	in float2 texcoord)
 {
-	float alpha= tex2D(alpha_test_map, transform_texcoord(texcoord, alpha_test_map_xform)).a;
+	float alpha= sample2D(alpha_test_map, transform_texcoord(texcoord, alpha_test_map_xform)).a;
 
 	clip(alpha-0.5f);			// always on for shadow
 	
@@ -48,7 +48,7 @@ float calc_alpha_test_texture_ps(
 	in float2 texcoord,
 	in float4 albedo)
 {
-	float alpha= tex2D(alpha_test_map, transform_texcoord(texcoord, alpha_test_map_xform)).a;
+	float alpha= sample2D(alpha_test_map, transform_texcoord(texcoord, alpha_test_map_xform)).a;
 
 	clip(alpha-0.5f);			// always on for shadow
 	

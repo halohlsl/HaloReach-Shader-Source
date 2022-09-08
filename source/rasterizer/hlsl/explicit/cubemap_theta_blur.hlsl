@@ -2,21 +2,15 @@
 
 #include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
+#include "explicit\cubemap_registers.fx"
 
 //@generate screen
 
-samplerCUBE source_sampler : register(s0);
-
-// source texture size (width, height)
-PIXEL_CONSTANT(float2, source_size, c0);
-PIXEL_CONSTANT(float3, forward, c1);
-PIXEL_CONSTANT(float3, up, c2);
-PIXEL_CONSTANT(float3, left, c3);
-PIXEL_CONSTANT(float, delta, c4);
+LOCAL_SAMPLER_CUBE(source_sampler, 0);
 
 struct screen_output
 {
-	float4 position	:POSITION;
+	float4 position	:SV_Position;
 	float2 texcoord	:TEXCOORD0;
 };
 
@@ -50,13 +44,13 @@ float3 theta_phi_to_direction(in float theta, float phi)
 float4 sample_cube_map(float3 direction)
 {
 	direction.y= -direction.y;
-	return texCUBE(source_sampler, direction);
+	return sampleCUBE(source_sampler, direction);
 }
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	float2 sample0= IN.texcoord;
-	
+
 	float3 direction;
 	direction= forward - (sample0.y*2-1)*up - (sample0.x*2-1)*left;
 	direction= direction * (1.0 / sqrt(dot(direction, direction)));
@@ -67,7 +61,7 @@ float4 default_ps(screen_output IN) : COLOR
 	float local_delta= delta / sin(phi);		// make delta bigger near the poles
 
 	float4 color= 0.0f;
-	
+
 	color += 1   * sample_cube_map(theta_phi_to_direction(theta - local_delta*5, phi));
 	color += 10  * sample_cube_map(theta_phi_to_direction(theta - local_delta*4, phi));
 	color += 45  * sample_cube_map(theta_phi_to_direction(theta - local_delta*3, phi));

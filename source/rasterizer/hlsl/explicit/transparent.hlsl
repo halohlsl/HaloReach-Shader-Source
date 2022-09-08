@@ -7,11 +7,11 @@
 #include "shared\render_target.fx"
 
 //@generate transparent
-sampler2D basemap_sampler : register(s0);
+LOCAL_SAMPLER_2D(basemap_sampler, 0);
 
 struct transparent_output
 {
-	float4 HPosition	:POSITION;
+	float4 HPosition	:SV_Position;
 	float2 Texcoord		:TEXCOORD0;
 	float4 Color		:COLOR0;
 };
@@ -28,7 +28,7 @@ transparent_output default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(transparent_output IN) : COLOR
+accum_pixel default_ps(transparent_output IN) : SV_Target
 {
-	return convert_to_render_target(IN.Color * tex2D(basemap_sampler, IN.Texcoord), false, false);
+	return convert_to_render_target(IN.Color * sample2D(basemap_sampler, IN.Texcoord), false, false);
 }

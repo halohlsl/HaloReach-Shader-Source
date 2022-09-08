@@ -2,9 +2,11 @@
 BEAM.FX
 Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 11/14/2005 4:14:31 PM (davcook)
-	
+
 Shaders for beam renders
 */
+
+#include "hlsl_constant_globals.fx"
 
 #undef MEMEXPORT_ENABLED
 
@@ -13,13 +15,19 @@ Shaders for beam renders
 #define IF_CATEGORY_OPTION(cat, opt) if (TEST_CATEGORY_OPTION(cat, opt))
 #define IF_NOT_CATEGORY_OPTION(cat, opt) if (!TEST_CATEGORY_OPTION(cat, opt))
 
+#if DX_VERSION == 9
+#define CATEGORY_PARAM(_name) PARAM(int, _name)
+#elif DX_VERSION == 11
+#define CATEGORY_PARAM(_name) PARAM(float, _name)
+#endif
+
 // If the categories are not defined by the preprocessor, treat them as shader constants set by the game.
 // We could automatically prepend this to the shader file when doing generate-templates, hmmm...
 #ifndef category_blend_mode
-extern int category_blend_mode;
+CATEGORY_PARAM(category_blend_mode);
 #endif
 #ifndef category_fog
-extern int category_fog;
+CATEGORY_PARAM(category_fog);
 #endif
 
 
@@ -32,21 +40,39 @@ extern int category_fog;
 #include "hlsl_vertex_types.fx"
 
 
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
+#include "effects\beam_render_registers.fx"
 
 #ifdef VERTEX_SHADER
 #include "effects\beam_common.fx"
 #include "shared\atmosphere.fx"
+#include "effects\beam_strip.fx"
+
+#if DX_VERSION == 9
+PARAM_STRUCT(s_strip, g_strip);
+#endif
+
+// Take the index from the vertex input semantic and translate it into the actual lookup 
+// index in the vertex buffer.
+#ifndef PC_CPU
+int profile_index_to_buffer_index( int profile_index )
+{
+	int beam_row= round(profile_index / k_profiles_per_row);
+	int profile_index_within_row= floor((profile_index + 0.5) % k_profiles_per_row);
+	int buffer_row= g_strip.m_row[beam_row];
+
+	return buffer_row * k_profiles_per_row + profile_index_within_row;
+}
+#else
+
+int profile_index_to_buffer_index( int profile_index )
+{
+	int beam_row= profile_index / k_profiles_per_row;
+	int profile_index_within_row= profile_index % k_profiles_per_row;
+	int buffer_row= g_strip.m_row[beam_row];
+	
+	return buffer_row * k_profiles_per_row + profile_index_within_row;
+}
+#endif
 #endif
 
 #define BLEND_MODE_SELF_ILLUM (TEST_CATEGORY_OPTION(blend_mode, additive) || TEST_CATEGORY_OPTION(blend_mode, add_src_times_srcalpha))
@@ -54,7 +80,7 @@ extern int category_fog;
 //This comment causes the shader compiler to be invoked for certain types
 //@generate s_beam_vertex
 
-// The following defines the protocol for passing interpolated data between the vertex shader 
+// The following defines the protocol for passing interpolated data between the vertex shader
 // and the pixel shader.  It pays to compress the data into as few interpolators as possible.
 // The reads and writes should evaporate out of the compiled code into the register mapping.
 struct s_beam_render_vertex
@@ -70,7 +96,7 @@ struct s_beam_render_vertex
 
 struct s_beam_interpolators
 {
-	float4 m_position0	:POSITION0;
+	float4 m_position0	:SV_Position;
 	float4 m_color0		:COLOR0;
 	float4 m_color1		:COLOR1;
 	float4 m_texcoord0	:TEXCOORD0;
@@ -79,7 +105,7 @@ struct s_beam_interpolators
 s_beam_interpolators write_beam_interpolators(s_beam_render_vertex VERTEX)
 {
 	s_beam_interpolators INTERPOLATORS;
-	
+
 	INTERPOLATORS.m_position0= VERTEX.m_position;
 	INTERPOLATORS.m_color0= VERTEX.m_color;
 	INTERPOLATORS.m_color1= float4(VERTEX.m_color_add, VERTEX.m_black_point);
@@ -91,7 +117,7 @@ s_beam_interpolators write_beam_interpolators(s_beam_render_vertex VERTEX)
 s_beam_render_vertex read_beam_interpolators(s_beam_interpolators INTERPOLATORS)
 {
 	s_beam_render_vertex VERTEX;
-	
+
 	VERTEX.m_position= INTERPOLATORS.m_position0;
 	VERTEX.m_color= INTERPOLATORS.m_color0;
 	VERTEX.m_color_add= INTERPOLATORS.m_color1;
@@ -104,14 +130,15 @@ s_beam_render_vertex read_beam_interpolators(s_beam_interpolators INTERPOLATORS)
 }
 
 #ifdef VERTEX_SHADER
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 
 // Match with c_beam_definition::e_profile
-#define _profile_ribbon		0 
+#define _profile_ribbon		0
 #define _profile_cross		1
 #define _profile_ngon		2
 #define _profile_type_max	3
 
+#if DX_VERSION == 9
 // Take the index from the vertex input semantic and translate it into strip, index, and offset.
 void calc_strip_profile_and_offset( in int index, out int strip_index, out int buffer_index, out int offset )
 {
@@ -121,10 +148,11 @@ void calc_strip_profile_and_offset( in int index, out int strip_index, out int b
 	buffer_index= floor((index_within_strip + 0.5f) / 2);
 	offset= index_within_strip - buffer_index * 2;
 }
+#endif
 
 float2 strip_and_offset_to_cross_sectional_offset( int strip_index, int offset )
 {
-	if (g_all_state.m_profile_type== _profile_ribbon || g_all_state.m_profile_type== _profile_cross)
+	[branch] if (g_all_state.m_profile_type== _profile_ribbon || g_all_state.m_profile_type== _profile_cross)
 	{
 		static float2x2 shift[2]= {{{-0.5f, 0.0f}, {0.5f, 0.0f}, }, {{0.0f, -0.5f}, {0.0f, 0.5f}, }, };
 		return shift[strip_index][offset];
@@ -139,7 +167,7 @@ float2 strip_and_offset_to_cross_sectional_offset( int strip_index, int offset )
 float2 profile_offset_to_texcoord( int strip_index, int offset, float cumulative_length )
 {
 	float v_shift; // number from -0.5f to 0.5f ranging across/around the cross-section
-	if (g_all_state.m_profile_type== _profile_ribbon || g_all_state.m_profile_type== _profile_cross)
+	[branch] if (g_all_state.m_profile_type== _profile_ribbon || g_all_state.m_profile_type== _profile_cross)
 	{
 		v_shift= offset - 0.5f;
 	}
@@ -160,7 +188,7 @@ float2x3 cross_section_world_basis (float3 direction)
 	static float3 up= {0.0f, 0.0f, 1.0f};
 	basis[0]= normalize(cross(direction, up));
 	basis[1]= normalize(cross(basis[0], direction));
-	
+
 	return basis;
 }
 
@@ -171,29 +199,43 @@ float2x3 cross_section_billboard_basis (float3 position, float3 direction)
 
 	basis[0]= normalize(cross(position - Camera_Position, direction));
 	basis[1]= normalize(cross(basis[0], direction));
-	
+
 	return basis;
 }
 #endif	//#ifndef pc
 
 // Actual input vertex format is hard-coded in vfetches as s_profile_state
-s_beam_interpolators default_vs( vertex_type IN )
+s_beam_interpolators default_vs(
+#if DX_VERSION == 11
+	in uint instance_id : SV_InstanceID,
+	in uint vertex_id : SV_VertexID
+#else
+	vertex_type vIN
+#endif
+)
 {
 	s_beam_render_vertex OUT;
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 	// This would be used for killing verts by setting oPts.z!=0 .
 	//asm {
 	//	config VsExportMode=kill
 	//};
-	
+
 	// Break the input index into a strip index, a profile index and an {0,1}-offset.
 	int strip_index, profile_index, offset;
+#if DX_VERSION == 11
+	strip_index = instance_id;
+	profile_index = vertex_id / 2;
+	offset = vertex_id & 1;
+	s_profile_state STATE= read_profile_state(profile_index_to_buffer_index(profile_index));
+#else
 	calc_strip_profile_and_offset(IN.index, strip_index, profile_index, offset);
 	s_profile_state STATE= read_profile_state(profile_index_to_buffer_index(profile_index));
-	
+#endif
+
 	// Compute the vertex position within the cross-sectional plane of the profile
-	float2 cross_section_pos= strip_and_offset_to_cross_sectional_offset(strip_index, offset) * STATE.m_thickness;
-		
+   float2 cross_section_pos = strip_and_offset_to_cross_sectional_offset(strip_index, offset) * STATE.m_thickness;
+
 	// Transform from cross-section plane to world space.
 	float2x3 world_basis= cross_section_world_basis(g_all_state.m_direction);
 	float2x3 billboard_basis= (g_all_state.m_profile_type== _profile_ribbon) ? cross_section_billboard_basis(STATE.m_position, g_all_state.m_direction) : world_basis;
@@ -202,11 +244,13 @@ s_beam_interpolators default_vs( vertex_type IN )
 	sincos(_2pi*rotation, rotsin, rotcos);
 	float2x2 rotmat= {{rotcos, rotsin}, {-rotsin, rotcos}, };
 	billboard_basis= mul(rotmat, billboard_basis);
+
 	float3 world_pos= STATE.m_position + mul(cross_section_pos, billboard_basis) + mul(STATE.m_offset, world_basis);
-	
-	// Transform from world space to clip space. 
+
+	// Transform from world space to clip space.
 	OUT.m_position= mul(float4(world_pos, 1.0f), View_Projection);
-	
+
+
 	// Compute vertex texcoord
 	OUT.m_texcoord= profile_offset_to_texcoord(strip_index, offset, length(STATE.m_percentile * g_all_state.m_capped_length));
 
@@ -238,7 +282,7 @@ s_beam_interpolators default_vs( vertex_type IN )
 	if (TEST_BIT(g_all_state.m_appearance_flags,_beam_origin_faded_bit))
 	{
 		float distance_from_origin= length(world_pos - g_all_state.m_origin);
-		OUT.m_color.w*= saturate(g_all_state.m_origin_range * 
+		OUT.m_color.w*= saturate(g_all_state.m_origin_range *
 			(distance_from_origin - g_all_state.m_origin_cutoff));
 	}
 	if (TEST_BIT(g_all_state.m_appearance_flags,_beam_edge_faded_bit))
@@ -266,7 +310,7 @@ s_beam_interpolators default_vs( vertex_type IN )
 
 	float depth= dot(Camera_Backward, Camera_Position-world_pos.xyz);
 	OUT.m_depth= depth;
-	
+
 #else	//#ifndef pc
 	OUT.m_position= float4(0.0f, 0.0f, 0.0f, 0.0f);	// Doesn't work on PC!!!  (This just makes it compile.)
 	OUT.m_color= float4(0.0f, 0.0f, 0.0f, 0.0f);	// Doesn't work on PC!!!  (This just makes it compile.)
@@ -303,7 +347,7 @@ s_beam_interpolators default_vs( vertex_type IN )
 float remap_alpha(float black_point, float alpha)
 {
 	float mid_point= (black_point+1.0f)/2.0f;
-	return mid_point*saturate((alpha-black_point)/(mid_point-black_point)) 
+	return mid_point*saturate((alpha-black_point)/(mid_point-black_point))
 		+ saturate(alpha-mid_point);	// faster than a branch
 }
 
@@ -311,91 +355,95 @@ float remap_alpha(float black_point, float alpha)
 #include "shared\render_target.fx"
 #include "shared\texture_xform.fx"
 
-extern sampler base_map;
-extern float4 base_map_xform;
+PARAM_SAMPLER_2D(base_map);
+PARAM(float4, base_map_xform);
 
-extern sampler base_map2;
-extern float4 base_map2_xform;
+PARAM_SAMPLER_2D(base_map2);
+PARAM(float4, base_map2_xform);
 
-extern sampler palette;
-extern sampler alpha_map;
+PARAM_SAMPLER_2D(palette);
+PARAM_SAMPLER_2D(alpha_map);
 
-extern float modulation_factor : register(c77);
-extern float alpha_modulation_factor : register(c78);
-extern float palette_shift_amount : register(c79);
-extern float depth_fade_range : register(c80);
+PARAM(float, modulation_factor);
+PARAM(float, alpha_modulation_factor);
+PARAM(float, palette_shift_amount);
+PARAM(float, depth_fade_range);
 
 
 float4 sample_diffuse(float2 texcoord, float palette_v, float depth_alpha)
 {
 	float particle_alpha= 1.0f;
-	
+
 	IF_CATEGORY_OPTION(albedo, diffuse_only)
 	{
-		return tex2D(base_map, texcoord);
+		return sample2D(base_map, texcoord);
 	}
-	
+
 	// Dependent texture fetch.  The palette can be any size.  In order to avoid filtering artifacts,
 	// the palette should be smoothly varying, or else filtering should be turned off.
 	IF_CATEGORY_OPTION(albedo, palettized)
 	{
-		float index= tex2D(base_map, texcoord).x;
-		return tex2D(palette, float2(index, palette_v));
+		float index= sample2D(base_map, texcoord).x;
+		return sample2D(palette, float2(index, palette_v));
 	}
-	
+
 	// Same as above except the alpha comes from the original texture, not the palette.
 	IF_CATEGORY_OPTION(albedo, palettized_plus_alpha)
 	{
-		float index= tex2D(base_map, texcoord).x;
-		float alpha= tex2D(alpha_map, texcoord).w;
-		return float4(tex2D(palette, float2(index, palette_v)).xyz, alpha);
+		float index= sample2D(base_map, texcoord).x;
+		float alpha= sample2D(alpha_map, texcoord).w;
+		return float4(sample2D(palette, float2(index, palette_v)).xyz, alpha);
 	}
-	
+
 	IF_CATEGORY_OPTION(albedo, palettized_plasma)
 	{
-		float noise_a=	tex2D(base_map,		transform_texcoord(texcoord, base_map_xform)).r;
-		float noise_b=	tex2D(base_map2,	transform_texcoord(texcoord, base_map2_xform)).r;
+		float noise_a=	sample2D(base_map,	transform_texcoord(texcoord, base_map_xform)).r;
+		float noise_b=	sample2D(base_map2,	transform_texcoord(texcoord, base_map2_xform)).r;
 		float index=	abs(noise_a - noise_b);
 
-		float alpha=	tex2D(alpha_map, texcoord).a;
+		float alpha=	sample2D(alpha_map, texcoord).a;
 
 		index=	saturate(index + (1-alpha*particle_alpha*depth_alpha) * alpha_modulation_factor);
 
-		float4 palette_value=	tex2D(palette, float2(index, palette_v));
+		float4 palette_value=	sample2D(palette, float2(index, palette_v));
 
 		return float4(palette_value.rgb, alpha);
-	}	
+	}
 
 	IF_CATEGORY_OPTION(albedo, palettized_2d_plasma)
 	{
-		float noise_a=	tex2D(base_map,		transform_texcoord(texcoord, base_map_xform)).r;
-		float noise_b=	tex2D(base_map2,	transform_texcoord(texcoord, base_map2_xform)).r;
+		float noise_a=	sample2D(base_map,	transform_texcoord(texcoord, base_map_xform)).r;
+		float noise_b=	sample2D(base_map2,	transform_texcoord(texcoord, base_map2_xform)).r;
 		float index=	abs(noise_a - noise_b);
 
-		float alpha=	tex2D(alpha_map, texcoord).a;
+		float alpha=	sample2D(alpha_map, texcoord).a;
 
 //		IF_CATEGORY_OPTION(depth_fade, palette_shift)
 //		{
 //			index=	saturate(index + (1-alpha*particle_alpha) * palette_shift_amount);
 //		}
-		
-		float4 palette_value=	tex2D(palette, float2(index, depth_alpha));
+
+		float4 palette_value=	sample2D(palette, float2(index, depth_alpha));
 //		float4 palette_value=	pow(1-abs(index - (1-depth_alpha)), 20);
 
 		return float4(palette_value.rgb, alpha);
-	}	
+	}
 }
 
 float compute_depth_fade(float2 screen_coords, float depth, float range)
 {
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 	if ((TEST_CATEGORY_OPTION(depth_fade, on) || TEST_CATEGORY_OPTION(depth_fade, palette_shift)) && !TEST_CATEGORY_OPTION(blend_mode, opaque))
-	{	
+	{
 		float4 depth_value;
-		asm 
+#ifdef xenon
+		asm
 		{
 			tfetch2D depth_value, screen_coords, depth_buffer, UnnormalizedTextureCoords = true, MagFilter = point, MinFilter = point, MipFilter = point, AnisoFilter = disabled
 		};
+#elif DX_VERSION == 11
+		depth_value = depth_buffer.Load(int3(screen_coords, 0));
+#endif
 		float scene_depth= 1.0f - depth_value.x;
 		scene_depth= 1.0f / (depth_constants.x + scene_depth * depth_constants.y);	// convert to real depth
 		float particle_depth= depth;
@@ -403,31 +451,31 @@ float compute_depth_fade(float2 screen_coords, float depth, float range)
 		return saturate(delta_depth / range);
 	}
 	else
-#endif // !pc	
+#endif // !pc
 	{
 		return 1.0f;
 	}
 }
 
 typedef accum_pixel s_beam_render_pixel_out;
-s_beam_render_pixel_out default_ps(s_beam_interpolators INTERPOLATORS, in float2 screen_coords : VPOS)
+s_beam_render_pixel_out default_ps(s_beam_interpolators INTERPOLATORS, SCREEN_POSITION_INPUT(screen_coords))
 {
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 	s_beam_render_vertex IN= read_beam_interpolators(INTERPOLATORS);
 
 	float depth_fade=	compute_depth_fade(screen_coords, IN.m_depth, depth_fade_range);
 
 	float4 blended= sample_diffuse(IN.m_texcoord, IN.m_palette, depth_fade);
-	
+
 	blended.w *= depth_fade;
-	
+
 	IF_CATEGORY_OPTION(black_point, on)
 	{
 		blended.w= remap_alpha(IN.m_black_point, blended.w);
 	}
-	
+
 	blended*= IN.m_color;
-		
+
 	// Non-linear blend modes don't work under the normal framework...
 	IF_CATEGORY_OPTION(blend_mode, multiply)
 	{

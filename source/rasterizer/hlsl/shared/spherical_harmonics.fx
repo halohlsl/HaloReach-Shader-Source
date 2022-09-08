@@ -3,17 +3,17 @@
 
 // some common shared routines for calculating sh lighting
 //
-// 
+//
 
 #ifdef VERTEX_SHADER
-sampler g_sample_vmf_diffuse_vs;
+PARAM_SAMPLER_2D( g_sample_vmf_diffuse_vs);
 #else
-sampler g_sample_vmf_diffuse;
+PARAM_SAMPLER_2D(g_sample_vmf_diffuse);
 #endif
 
-sampler g_sample_vmf_1d;
-sampler g_sample_zonal_rot_lut;
-sampler g_sample_vmf_phong_specular; // linear/quadratic terms of the zonal projection of vMF
+PARAM_SAMPLER_2D(g_sample_vmf_1d);
+PARAM_SAMPLER_2D(g_sample_zonal_rot_lut);
+PARAM_SAMPLER_2D(g_sample_vmf_phong_specular); // linear/quadratic terms of the zonal projection of vMF
 
 #define SH_ORDER_0
 #define SH_ORDER_1
@@ -36,7 +36,7 @@ sampler g_sample_vmf_phong_specular; // linear/quadratic terms of the zonal proj
 
 ///  $TODO: 20 Jun 2008   16:22 BUNGIE\yaohhu :
 ///     Sh coefficents is written everywhere. Should use this table:
-const float sh_constants_direction_evaluation[]=
+static const float sh_constants_direction_evaluation[]=
 {
     sh_constants_direction_evaluation0,
     sh_constants_direction_evaluation1,
@@ -53,31 +53,31 @@ float convertBandwidth2TextureCoord(float fFandWidth)
 }
 
 float vmf_diffuse(in float4 Y[2],in float3 vSurfNormal_in)
-{	
+{
     float2 dominant_coord=float2(dot(Y[0].xyz, vSurfNormal_in)*0.5+0.5,
         convertBandwidth2TextureCoord(Y[1].w));
-	return tex2Dlod(
+	return sample2Dlod(
 #ifdef VERTEX_SHADER
 		g_sample_vmf_diffuse_vs,
 #else
 		g_sample_vmf_diffuse,
 #endif
-		float4(dominant_coord,0,0)).a;
-}	
+		dominant_coord, 0).a;
+}
 
 float3 dual_vmf_diffuse(float3 normal, float4 lighting_constants[4])
-{	
+{
     float4 dom[2]={lighting_constants[0],lighting_constants[1]};
     float4 fil[2]={lighting_constants[2],lighting_constants[3]};
     float vmf_coeff_dom= vmf_diffuse(dom,normal);
     float vmf_coeff_fil= 0.25f;  // based on spherical harmonic or numerical integration
-    
+
     float3 vmf_lighting=vmf_coeff_dom*
         lighting_constants[1].rgb+
         vmf_coeff_fil*
-        lighting_constants[3].rgb;    
+        lighting_constants[3].rgb;
     return vmf_lighting/pi;
-}	
+}
 
 void calc_prt_ravi_diff(
 	in float prt_c0,
@@ -85,7 +85,9 @@ void calc_prt_ravi_diff(
 	out float4 prt_ravi_diff)
 {
 	prt_ravi_diff= 1.0f;
-	prt_ravi_diff.xz= prt_c0 / PRT_C0_DEFAULT;		// diffuse and specular occlusion	
+	prt_ravi_diff.xz= prt_c0 / PRT_C0_DEFAULT;		// diffuse and specular occlusion
 	prt_ravi_diff.w= min(dot(vertex_normal, v_analytical_light_direction), prt_ravi_diff.x);		// specular (vertex N) dot L (kills backfacing specular)
-}	
+}
+
+
 #endif

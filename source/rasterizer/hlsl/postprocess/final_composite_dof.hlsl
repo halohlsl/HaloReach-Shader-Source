@@ -15,7 +15,7 @@
 //@entry shadow_apply
 
 
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 
 #define COMBINE		combine_dof
 #define COMBINE_AA	combine_dof_antialiased
@@ -29,7 +29,7 @@ float4 combine_dof_antialiased(in float2 texcoord, in bool centered);
 #include "postprocess\final_composite_base.hlsl"
 
 
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 
 // depth of field
 #define DEPTH_BIAS			depth_constants.x

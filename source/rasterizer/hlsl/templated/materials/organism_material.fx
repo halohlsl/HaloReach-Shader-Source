@@ -11,22 +11,23 @@ It's a totally hack of sub-translucent materials, but I bet it works.
 // Organism material model parameters
 //****************************************************************************
 
-/* NOTICE: all extern parameters and 
-   function implementation which are shared 
+/* NOTICE: all extern parameters and
+   function implementation which are shared
    with cook-torrance has been contained in this file */
 #include "templated\materials\cook_torrance_core.fx"
+#include "shared\utilities.fx"
 
 // rim effects
-float3 rim_tint;
-float rim_power;
-float rim_width;
-float rim_maps_transition_ratio;
+PARAM(float3, rim_tint);
+PARAM(float, rim_power);
+PARAM(float, rim_width);
+PARAM(float, rim_maps_transition_ratio);
 
 // subsurface
-float3 subsurface_tint;
-float subsurface_propagation_bias;
-float subsurface_normal_detail;
-sampler subsurface_map;
+PARAM(float3, subsurface_tint);
+PARAM(float, subsurface_propagation_bias);
+PARAM(float, subsurface_normal_detail);
+PARAM_SAMPLER_2D(subsurface_map);
 
 #ifdef pc
 	#define FORCE_BRANCH
@@ -38,7 +39,7 @@ sampler subsurface_map;
 //*****************************************************************************
 // the material model
 //*****************************************************************************
-	
+
 void calc_material_organism_ps(
 	in float3 view_dir,
 	in float3 fragment_to_camera_world,
@@ -56,11 +57,11 @@ void calc_material_organism_ps(
 	inout float3 envmap_area_specular_only,
 	out float4 specular_radiance,
 	inout float3 diffuse_radiance)
-{	
+{
 	calc_material_full(
-		view_dir,		
+		view_dir,
 		fragment_to_camera_world,
-		bump_normal,	
+		bump_normal,
 		view_reflect_by_bump_dir,
 		sh_lighting_coefficients,
 		analytical_light_dir,
@@ -78,38 +79,38 @@ void calc_material_organism_ps(
 	const float3 surface_normal= tangent_frame[2];
 
 	// calculate rim lighting
-	float3 rim_color_diffuse;	
-	{		
+	float3 rim_color_diffuse;
+	{
 		float rim_ratio= saturate(dot(view_dir, bump_normal));
 		rim_ratio= saturate( (rim_width - rim_ratio) / max(rim_width, 0.001f) );
-		rim_ratio= pow(rim_ratio, rim_power);
-		rim_color_diffuse= analytical_light_intensity * rim_ratio * rim_tint;	
-	}	
+		rim_ratio= safe_pow(rim_ratio, rim_power);
+		rim_color_diffuse= analytical_light_intensity * rim_ratio * rim_tint;
+	}
 
 	// calculate subsurface
 	float3 subsurface_color;
 	{
-		float4 subsurface_map_color= tex2D(subsurface_map, texcoord);
+		float4 subsurface_map_color= sample2D(subsurface_map, texcoord);
 		float3 subsurface_normal=
-			lerp(lerp(surface_normal, bump_normal, subsurface_normal_detail), analytical_light_dir, subsurface_propagation_bias); 
-		subsurface_normal= normalize(subsurface_normal);					
+			lerp(lerp(surface_normal, bump_normal, subsurface_normal_detail), analytical_light_dir, subsurface_propagation_bias);
+		subsurface_normal= normalize(subsurface_normal);
 
 		float3 area_radiance_subsurface=
 			saturate(dot(subsurface_normal, analytical_light_dir)) * analytical_light_intensity;
 
-		subsurface_color= 
+		subsurface_color=
 			area_radiance_subsurface *
-			subsurface_tint *			
+			subsurface_tint *
 			subsurface_map_color.rgb;
 	}
 
-	// modify output 	
+	// modify output
 	diffuse_radiance+= rim_color_diffuse + subsurface_color;
 }
 
 
 float3 get_analytical_specular_multiplier_organism_ps(float specular_mask)
-{	
+{
 	return calc_analytical_specular_multiplier(specular_mask);
 }
 
@@ -134,44 +135,44 @@ void calc_material_analytic_specular_organism_ps(
 	out float3 additional_diffuse_radiance)
 {
 	calc_material_analytic_specular(
-		view_dir,				
-		normal_dir,				
-		view_reflect_dir,			
-		L,						
-		light_irradiance,			
-		diffuse_albedo_color,		
+		view_dir,
+		normal_dir,
+		view_reflect_dir,
+		L,
+		light_irradiance,
+		diffuse_albedo_color,
 		texcoord,
-		vertex_n_dot_l,			
+		vertex_n_dot_l,
 		tangent_frame,
 		spatially_varying_material_parameters,
-		normal_specular_blend_albedo_color,	
+		normal_specular_blend_albedo_color,
 		analytic_specular_radiance);
 
 	const float3 surface_normal= tangent_frame[2];
 
 	// calculate rim lighting
-	float3 rim_color_diffuse;	
-	{		
+	float3 rim_color_diffuse;
+	{
 		float rim_ratio= saturate(dot(view_dir, normal_dir));
 		rim_ratio= saturate( (rim_width - rim_ratio) / max(rim_width, 0.001f) );
 		rim_ratio= pow(rim_ratio, rim_power);
-		rim_color_diffuse= light_irradiance * rim_ratio * rim_tint;	
-	}	
+		rim_color_diffuse= light_irradiance * rim_ratio * rim_tint;
+	}
 
 	// calculate subsurface
 	float3 subsurface_color;
 	{
-		float4 subsurface_map_color= tex2D(subsurface_map, texcoord);
+		float4 subsurface_map_color= sample2D(subsurface_map, texcoord);
 		float3 subsurface_normal=
-			lerp(lerp(surface_normal, normal_dir, subsurface_normal_detail), L, subsurface_propagation_bias); 
-		subsurface_normal= normalize(subsurface_normal);					
+			lerp(lerp(surface_normal, normal_dir, subsurface_normal_detail), L, subsurface_propagation_bias);
+		subsurface_normal= normalize(subsurface_normal);
 
 		float3 area_radiance_subsurface=
 			saturate(dot(subsurface_normal, L)) * light_irradiance;
 
-		subsurface_color= 
+		subsurface_color=
 			area_radiance_subsurface *
-			subsurface_tint *			
+			subsurface_tint *
 			subsurface_map_color.rgb;
 	}
 

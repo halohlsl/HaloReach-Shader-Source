@@ -33,7 +33,7 @@ void evaluate_patchy_effect(
 	in float4 tex_coord_transform5,
 	in float4 tex_coord_transform6,
 	in float4 tex_coord_transform7,
-	in sampler tex_noise,
+	in texture_sampler_2d tex_noise,
 
 #ifdef PATCHY_EFFECT_ON_PLANAR_FOG
 	in float4 planar_fog_plane_coeffs,
@@ -81,42 +81,42 @@ void evaluate_patchy_effect(
 		noise_uv= tex_coord_transform0.xy 
 			+ tex_coord_transform0.z * texcoord_basis.xy
 			+ tex_coord_transform0.w * texcoord_basis.zw;
-		noise_values0.x= tex2D(tex_noise, noise_uv).x;
+		noise_values0.x= sample2D(tex_noise, noise_uv).x;
 
 		noise_uv= tex_coord_transform1.xy 
 			+ tex_coord_transform1.z * texcoord_basis.xy
 			+ tex_coord_transform1.w * texcoord_basis.zw;
-		noise_values0.y= tex2D(tex_noise, noise_uv).x;
+		noise_values0.y= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform2.xy 
 			+ tex_coord_transform2.z * texcoord_basis.xy
 			+ tex_coord_transform2.w * texcoord_basis.zw;
-		noise_values0.z= tex2D(tex_noise, noise_uv).x;
+		noise_values0.z= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform3.xy 
 			+ tex_coord_transform3.z * texcoord_basis.xy
 			+ tex_coord_transform3.w * texcoord_basis.zw;
-		noise_values0.w= tex2D(tex_noise, noise_uv).x;
+		noise_values0.w= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform4.xy 
 			+ tex_coord_transform4.z * texcoord_basis.xy
 			+ tex_coord_transform4.w * texcoord_basis.zw;
-		noise_values1.x= tex2D(tex_noise, noise_uv).x;
+		noise_values1.x= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform5.xy 
 			+ tex_coord_transform5.z * texcoord_basis.xy
 			+ tex_coord_transform5.w * texcoord_basis.zw;
-		noise_values1.y= tex2D(tex_noise, noise_uv).x;
+		noise_values1.y= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform6.xy 
 			+ tex_coord_transform6.z * texcoord_basis.xy
 			+ tex_coord_transform6.w * texcoord_basis.zw;
-		noise_values1.z= tex2D(tex_noise, noise_uv).x;
+		noise_values1.z= sample2D(tex_noise, noise_uv).x;
 		
 		noise_uv= tex_coord_transform7.xy 
 			+ tex_coord_transform7.z * texcoord_basis.xy
 			+ tex_coord_transform7.w * texcoord_basis.zw;
-		noise_values1.w= tex2D(tex_noise, noise_uv).x;		
+		noise_values1.w= sample2D(tex_noise, noise_uv).x;		
 	}
 
 

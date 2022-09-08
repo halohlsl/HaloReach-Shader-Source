@@ -27,7 +27,7 @@ float3 calc_blend_weapon_zoom(in float2 texcoord, in float4 combined, in float4 
 {
 	float3 blend= combined * bloom.a + bloom.rgb;
 	float2 blur_grade_texcoord= (texcoord.xy - player_window_constants.xy) / player_window_constants.zw;
-	const float blur_grade= tex2D(blur_grade_sampler, blur_grade_texcoord).b;
+	const float blur_grade= sample2D(blur_grade_sampler, blur_grade_texcoord).b;
 	[branch]
 	if (blur_grade > 0.01f)
 	{
@@ -35,8 +35,8 @@ float3 calc_blend_weapon_zoom(in float2 texcoord, in float4 combined, in float4 
 		//float3 blur_color= bloom.rgb * (intensity.z * bloom.a + 1);
 		float3 blur_color= bloom.rgb * (1 * bloom.a + 1);
 		blend= lerp(blend, blur_color, blur_grade);
-//		blend= lerp(blend, bloom.rgb * intensity.z, blur_grade);				
-		blend= lerp(blend, bloom.rgb * 1, blur_grade);				
+//		blend= lerp(blend, bloom.rgb * intensity.z, blur_grade);
+		blend= lerp(blend, bloom.rgb * 1, blur_grade);
 	}
 	return blend;
 }

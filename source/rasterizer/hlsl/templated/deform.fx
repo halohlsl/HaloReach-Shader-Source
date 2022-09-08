@@ -1,4 +1,5 @@
 #include "hlsl_vertex_types.fx"
+#include "shared\utilities.fx"
 
 float3 transform_point(in float4 position, in float4 node[3])
 {
@@ -83,17 +84,17 @@ void deform_flat_skinned(
 
 	// normalize the node weights so that they sum to 1
 	vertex.node_weights= vertex.node_weights/sum_of_weights;
-	
+
 	vertex.position.xyz= vertex.position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
 	vertex.texcoord= vertex.texcoord*UV_Compression_Scale_Offset.xy + UV_Compression_Scale_Offset.zw;
 
 	source_pos= float4(vertex.position.xyz, 1.0f);
-	
+
 	local_to_world_transform[0]= Nodes[vertex.node_indices.x][0] * vertex.node_weights.x +
 							Nodes[vertex.node_indices.y][0] * vertex.node_weights.y +
 							Nodes[vertex.node_indices.z][0] * vertex.node_weights.z +
 							Nodes[vertex.node_indices.w][0] * vertex.node_weights.w;
-							
+
 	local_to_world_transform[1]= Nodes[vertex.node_indices.x][1] * vertex.node_weights.x +
 							Nodes[vertex.node_indices.y][1] * vertex.node_weights.y +
 							Nodes[vertex.node_indices.z][1] * vertex.node_weights.z +
@@ -137,21 +138,21 @@ void deform_skinned(
 void deform_object_imposter(
 	inout s_object_imposter_vertex vertex,
 	out float4 local_to_world_transform[3])
-{	
+{
 	float4 source_pos;
-#ifdef xenon
-	int node_index= (k_bool_render_rigid_imposter)? 0 : (vertex.position.w+(1.f/512.f))*255.f; // decompress node index from last byte	
+#if defined(xenon) || (DX_VERSION == 11)
+	int node_index= (k_bool_render_rigid_imposter)? 0 : (vertex.position.w+(1.f/512.f))*255.f; // decompress node index from last byte
 #else
 	int node_index= 0;
 #endif //xenon/pc
 
-	vertex.position.xyz= vertex.position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;	
+	vertex.position.xyz= vertex.position.xyz*Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
 	source_pos= float4(vertex.position.x, vertex.position.y, vertex.position.z, 1.0f);
-	
+
 	local_to_world_transform= Nodes[node_index];
-	
+
 	vertex.position.xyz= transform_point(source_pos, Nodes[node_index]);
-	vertex.normal= transform_vector(vertex.normal, Nodes[node_index]);	
+	vertex.normal= transform_vector(vertex.normal, Nodes[node_index]);
 	vertex.normal= normalize(vertex.normal);
 }
 
@@ -168,9 +169,9 @@ void deform_tiny_position(
 	out float4 local_to_world_transform[3])
 {
 	// basically exactly the same as deform_rigid, but only acting on position
-	
+
 	float4 position;
-	
+
 	local_to_world_transform= Nodes[0];
 
 	position.xyz= vertex.position.xyz * Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
@@ -188,9 +189,9 @@ void deform_tiny_position_projective(
 	out float4 local_to_world_transform[3])
 {
 	// basically exactly the same as deform_rigid, but only acting on position
-	
+
 	float4 position;
-	
+
 	local_to_world_transform= Nodes[0];
 
 	position.xyz= vertex.position * Position_Compression_Scale.xyz + Position_Compression_Offset.xyz;
@@ -248,7 +249,7 @@ void deform_shader_cache(
 
 // Workaround for z-fighting problem...
 // Calculation of output interpolator "position" must be completely segregated from the
-// rest of the calculation by a scope with a runtime test.  DO NOT USE "position" for 
+// rest of the calculation by a scope with a runtime test.  DO NOT USE "position" for
 // anything after this call, other than a return value from the shader!
 void always_local_to_view(
 	inout vertex_type vertex,
@@ -257,19 +258,20 @@ void always_local_to_view(
 	out float3 binormal)
 {
 	float binormal_scale= (vertex.position.w*2.f)-1.f;
-	
+
     local_to_world_transform[0]=0;
     local_to_world_transform[1]=0;
     local_to_world_transform[2]=0;
-    
+
 	deform(vertex, local_to_world_transform);
 
 	// derive binormal from normal and tangent plus a flag in position.w
 	binormal= cross(vertex.normal, vertex.tangent);
 	binormal= mul(binormal, binormal_scale);
-	binormal= normalize(binormal);
-	
+	binormal= safe_normalize(binormal);
+
 	position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
+
 }
 
 void always_local_to_view_fast(
@@ -280,9 +282,9 @@ void always_local_to_view_fast(
     local_to_world_transform[0]=0;
     local_to_world_transform[1]=0;
     local_to_world_transform[2]=0;
-    
+
 	deform(vertex, local_to_world_transform);
-	
+
 	position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
 }
 

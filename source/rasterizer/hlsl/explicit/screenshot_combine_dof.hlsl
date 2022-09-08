@@ -5,6 +5,7 @@
 // non-antialiased (screenshots should never take antialiased pathway)
 //@entry default
 
+#include "hlsl_constant_globals.fx"
 
 #ifndef pc
 #define COMBINE_HDR_LDR combine_dof

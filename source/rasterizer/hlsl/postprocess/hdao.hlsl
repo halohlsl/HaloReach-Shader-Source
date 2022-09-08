@@ -8,62 +8,43 @@
 //@entry static_sh
 //@entry shadow_generate
 //@entry active_camo
+//@entry static_nv_sh
 
 
 
-#define CONSTANT_NAME(n) c##n
-#include "postprocess\postprocess_registers.h"
+//#include "postprocess\postprocess_registers.fx"
+#include "postprocess\hdao_registers.fx"
+#include "postprocess\ssao_local_depth_registers.fx"
 
-VERTEX_CONSTANT(float4, quad_tiling,		c16);		// quad tiling parameters (x, 1/x, y, 1/y)
-VERTEX_CONSTANT(float4, position_transform, c17);		// position transform from quad coordinates [0,x], [0,y] -> screen coordinates
-VERTEX_CONSTANT(float4, texture_transform,	c18);		// texture transform from quad coordinates [0,x], [0,y] -> texture coordinates
-VERTEX_CONSTANT(float4, depth,	c19);					// depth at which the output should be located
-
-PIXEL_CONSTANT( float4, pixel_size,				POSTPROCESS_PIXELSIZE_PIXEL_CONSTANT );
-PIXEL_CONSTANT( float4, scale,					POSTPROCESS_DEFAULT_PIXEL_CONSTANT );
-PIXEL_CONSTANT( float4, local_depth_constants,	c100 );		// ###ctchou $TODO is this the same as the global depth constants?
 #define SCREENSHOT_RADIUS_X		(pixel_size.z)
 #define SCREENSHOT_RADIUS_Y		(pixel_size.w)
 
-
-PIXEL_CONSTANT( float4,	corner_params,		c116 );			// corner_scale, corner_scale*2, corner_offset
 #define CORNER_SCALE	(corner_params.x)
 #define CORNER_OFFSET	(corner_params.y)
 
-PIXEL_CONSTANT( float4,	bounds_params,		c117 );			// bounds_scale, bounds_offset
 #define BOUNDS_SCALE	(bounds_params.x)
 #define BOUNDS_OFFSET	(bounds_params.y)
 
-PIXEL_CONSTANT( float4,	curve_params,		c118 );			// curve_scale, curve_offset, curve_sigma
 #define CURVE_SCALE		(curve_params.x)
 #define CURVE_OFFSET	(curve_params.y)
 #define CURVE_SIGMA		(curve_params.z)
 #define CURVE_SIGMA2	(curve_params.w)					// ignores sample count, for use with screenshots
 
-PIXEL_CONSTANT( float4,	fade_params,		c119 );			//
 #define NEAR_SCALE		(fade_params.x)
 #define NEAR_OFFSET		(fade_params.y)
 #define FAR_SCALE		(fade_params.z)
 #define FAR_OFFSET		(fade_params.w)
 
-PIXEL_CONSTANT( float4, channel_scale,		c120 );			// channel transform CONTAINS curve_scale/curve_offset already
 #define CHANNEL_SCALE	(channel_scale.xyzw)
-
-PIXEL_CONSTANT( float4, channel_offset,		c121 );
 #define CHANNEL_OFFSET	(channel_offset.xyzw)
-
-
-sampler2D depth_sampler		: register(s0);
-sampler2D depth_low_sampler : register(s1);
-sampler2D mask_sampler		: register(s2);
 
 struct screen_output
 {
-	float4 position		:POSITION;
+	float4 position		:SV_Position;
 	float2 texcoord		:TEXCOORD0;
 };
 
-#ifdef pc	// --------- pc -------------------------------------------------------------------------------------
+#if defined(pc) // --------- pc -------------------------------------------------------------------------------------
 screen_output default_vs(in vertex_type IN)
 {
 	screen_output OUT;
@@ -88,27 +69,31 @@ screen_output active_camo_vs(in vertex_type IN)
 {
 	return default_vs(IN);
 }
+screen_output static_nv_sh_vs(in vertex_type IN)
+{
+	return default_vs(IN);
+}
 #else		// --------- xenon ----------------------------------------------------------------------------------
-screen_output default_vs(in int index : INDEX)
+screen_output default_vs(in int index : SV_VertexID)
 {
 	screen_output OUT;
-		
+
 	float	quad_index=		floor(index / 3);						//		[0,	x*y-1]
 	float	quad_vertex=	index -	quad_index * 3;					//		[0, 2]
 
 	float2	quad_coords;
 	quad_coords.y=	floor(quad_index * quad_tiling.y);				//		[0, y-1]
 	quad_coords.x=	quad_index - quad_coords.y * quad_tiling.x;		//		[0, x-1]
-		
+
 	float2	subquad_coords;
 	subquad_coords.y=	floor(quad_vertex / 2);						//		[0, 1]
 	subquad_coords.x=	quad_vertex - subquad_coords.y * 2;			//		[0, 1]
-	
+
 //	if (subquad_coords.y > 0)
 //	{
 //		subquad_coords.x= 1-subquad_coords.x;
 //	}
-	
+
 	quad_coords += subquad_coords;
 
 	// build interpolator output
@@ -116,22 +101,22 @@ screen_output default_vs(in int index : INDEX)
 	OUT.position.xy=		quad_coords * position_transform.xy + position_transform.zw;
 	OUT.position.zw=		depth.zw;
 	OUT.texcoord=			quad_coords * texture_transform.xy + texture_transform.zw;
-	
+
 	return OUT;
 }
-screen_output albedo_vs(in int index : INDEX)
+screen_output albedo_vs(in int index : SV_VertexID)
 {
 	return default_vs(index);
 }
-screen_output static_sh_vs(in int index : INDEX)
+screen_output static_sh_vs(in int index : SV_VertexID)
 {
 	return default_vs(index);
 }
-screen_output shadow_generate_vs(in int index : INDEX)
+screen_output shadow_generate_vs(in int index : SV_VertexID)
 {
 	return default_vs(index);
 }
-screen_output active_camo_vs(in int index : INDEX)
+screen_output active_camo_vs(in int index : SV_VertexID)
 {
 	return default_vs(index);
 }
@@ -144,9 +129,9 @@ float calculate_fade(float center_depth)
 	float far_fade=		saturate(center_depth * FAR_SCALE + FAR_OFFSET);
 	float fade=			near_fade * far_fade;
 
-	// smoothing	
+	// smoothing
 //	fade=	(3-2*fade)*fade*fade;
-	
+
 	return fade;
 }
 
@@ -189,7 +174,7 @@ float calc_occlusion_samples(in float4 depths0, in float4 depths1, in float cent
 //	float4 bounds=			saturate(BOUNDS_OFFSET + min(depths0, depths1) * (BOUNDS_SCALE / center_depth));
 //	bounds *= bounds;		// the square based on bounds here is relatively expensive
 
-	
+
 //	float depression_scale=	20 / abs(center_depth);
 //	float4 depression=		saturate(depression_scale * (center_depth * 2.0 - (depths0 + depths1)));
 
@@ -206,7 +191,7 @@ float calc_occlusion_samples(in float4 depths0, in float4 depths1, in float cent
 //	float4 bounds2=			saturate(BOUNDS_OFFSET + (center_depth - depths1) * (BOUNDS_SCALE / center_depth));
 //	return dot(depression * bounds1 * bounds2, 1.0f);
 
-//*/	
+//*/
 }
 
 
@@ -221,6 +206,7 @@ void fix_depth_scale(inout float4 depths)
 }
 
 
+#ifdef xenon
 
 #define CALC_OCCLUSION(samp, fix_depth,		DX0, DY0,		DX1, DY1)																											\
 {																																												\
@@ -265,33 +251,71 @@ void fix_depth_scale(inout float4 depths)
 		};																																										\
 	}																																											\
 	occlusion	+=	calc_occlusion_samples(depths0.xyzw, depths1.xyzw, center_depth);																							\
-}	
+}
+
+#elif DX_VERSION == 11
+
+#define CALC_OCCLUSION(samp, fix_depth,		DX0, DY0,		DX1, DY1)			\
+{																				\
+	depths0.x= samp.t.Sample(samp.s, texcoord, int2(-DX0 - 0.5, -DY0 - 0.5)).r;	\
+	depths0.y= samp.t.Sample(samp.s, texcoord, int2(-DX1 - 0.5, -DY1 - 0.5)).r;	\
+	depths0.z= samp.t.Sample(samp.s, texcoord, int2(-DY0 - 0.5, +DX0 - 0.5)).r;	\
+	depths0.w= samp.t.Sample(samp.s, texcoord, int2(-DY1 - 0.5, +DX1 - 0.5)).r;	\
+																				\
+	depths1.x= samp.t.Sample(samp.s, texcoord, int2(+DX0 - 0.5, +DY0 - 0.5)).r;	\
+	depths1.y= samp.t.Sample(samp.s, texcoord, int2(+DX1 - 0.5, +DY1 - 0.5)).r;	\
+	depths1.z= samp.t.Sample(samp.s, texcoord, int2(+DY0 - 0.5, -DX0 - 0.5)).r;	\
+	depths1.w= samp.t.Sample(samp.s, texcoord, int2(+DY1 - 0.5, -DX1 - 0.5)).r;	\
+																				\
+	fix_depth(depths0);															\
+	fix_depth(depths1);															\
+																				\
+	occlusion+= calc_occlusion_samples(depths0, depths1, center_depth);			\
+}
+
+#define CALC_OCCLUSION4(samp, fix_depth,		DX0, DY0)					\
+{																			\
+	depths0= samp.t.Sample(samp.s, texcoord, int2(-DX0 - 0.5, -DY0 - 0.5));	\
+	depths1= samp.t.Sample(samp.s, texcoord, int2(+DX0 - 0.5, +DY0 - 0.5));	\
+	occlusion+= calc_occlusion_samples(depths0, depths1, center_depth);		\
+																			\
+	depths0= samp.t.Sample(samp.s, texcoord, int2(-DY0 - 0.5, +DX0 - 0.5));	\
+	depths1= samp.t.Sample(samp.s, texcoord, int2(+DY0 - 0.5, -DX0 - 0.5)); \
+	occlusion+= calc_occlusion_samples(depths0, depths1, center_depth);		\
+}
+
+#endif
 
 
 // small 24-sample
 
 //[maxtempreg(4)]
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return 1.0f;
 #else
 
 	float2 texcoord= IN.texcoord;
-	
+
 	float inv_center_depth;
+#ifdef xenon
 	asm
 	{
 		tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
 	};
+#elif DX_VERSION == 11
+	inv_center_depth= sample2D(depth_sampler, texcoord).r;
+#endif
+
 	inv_center_depth=	(local_depth_constants.x + inv_center_depth * local_depth_constants.y);
 	float center_depth=	1.0f / inv_center_depth;
-	
-	
+
+
 	float4 depths0;
 	float4 depths1;
 	float occlusion= 0;
-	
+
 //	CALC_OCCLUSION(depth_sampler,	fix_depth_deproject,		1.0, 1.0,		1.0, 0.0);
 	CALC_OCCLUSION(depth_sampler,	fix_depth_deproject,		2.0, 2.0,		3.0, 0.0);
 	CALC_OCCLUSION(depth_sampler,	fix_depth_deproject,		5.0, 2.0,		2.0, 5.0);
@@ -304,7 +328,7 @@ float4 default_ps(screen_output IN) : COLOR
 
 	return CHANNEL_OFFSET + CHANNEL_SCALE * max(1-fade, exp2(CURVE_SIGMA * occlusion*occlusion));
 
-	
+
 #endif
 }
 
@@ -312,26 +336,31 @@ float4 default_ps(screen_output IN) : COLOR
 // large 64 sample
 
 //[maxtempreg(4)]
-float4 albedo_ps(screen_output IN,	float2 vpos : VPOS) : COLOR
+float4 albedo_ps(screen_output IN,	SCREEN_POSITION_INPUT(vpos)) : SV_Target
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return 1.0f;
 #else
 
 	float2 texcoord= IN.texcoord;
-	
+
 	float inv_center_depth;
+#ifdef xenon
 	asm
 	{
 		tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
 	};
+#elif DX_VERSION == 11
+	inv_center_depth= sample2D(depth_sampler, texcoord).r;
+#endif
+
 	inv_center_depth=	(local_depth_constants.x + inv_center_depth * local_depth_constants.y);
 	float center_depth=	1.0f / inv_center_depth;
 
 	float4 depths0;
 	float4 depths1;
 	float occlusion= 0;
-	
+
 //	CALC_OCCLUSION4(depth_low_sampler,	fix_depth_scale,			2.0, 2.0);
 //	CALC_OCCLUSION4(depth_low_sampler,	fix_depth_scale,			3.0, 0.0);
 
@@ -343,7 +372,7 @@ float4 albedo_ps(screen_output IN,	float2 vpos : VPOS) : COLOR
 
 //	CALC_OCCLUSION4(depth_low_sampler,	fix_depth_scale,			4.5, 1.5);
 //	CALC_OCCLUSION4(depth_low_sampler,	fix_depth_scale,			1.5, 4.5);
-		
+
 //	occlusion *= 2.0f;			// 8 sample
 //	occlusion *= 1.333f;		// 12 sample
 
@@ -361,34 +390,39 @@ float4 albedo_ps(screen_output IN,	float2 vpos : VPOS) : COLOR
 // optimized predicated 64 sample
 
 [maxtempreg(5)]
-float4 static_sh_ps(screen_output IN) : COLOR
+float4 static_sh_ps(screen_output IN) : SV_Target
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return 1.0f;
 #else
-	float2 texcoord= IN.texcoord;
-	
-//	float mask;
-//	asm
-//	{
-//		tfetch2D	mask.r___, texcoord, mask_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
-//	};
-	
-	float occlusion=	0.0f;
-	float fade=			1.0f;
-	
-//	[predicateBlock]
-//	if (mask > 0.0f)
+	float2 texcoord = IN.texcoord;
+
+	//	float mask;
+	//	asm
+	//	{
+	//		tfetch2D	mask.r___, texcoord, mask_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
+	//	};
+
+	float occlusion = 0.0f;
+	float fade = 1.0f;
+
+	//	[predicateBlock]
+	//	if (mask > 0.0f)
 	{
 		float inv_center_depth;
+#ifdef xenon
 		asm
 		{
-			tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
+			tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter = point, MinFilter = point, MipFilter = point, AnisoFilter = disabled, OffsetX = +0.0, OffsetY = +0.0
 		};
-		inv_center_depth=	(local_depth_constants.x + inv_center_depth * local_depth_constants.y);
-		float center_depth=	1.0f / inv_center_depth;
+#elif DX_VERSION == 11
+		inv_center_depth = sample2D(depth_sampler, texcoord).r;
+#endif
 
-		fade= calculate_fade(center_depth);
+		inv_center_depth = (local_depth_constants.x + inv_center_depth * local_depth_constants.y);
+		float center_depth = 1.0f / inv_center_depth;
+
+		fade = calculate_fade(center_depth);
 
 		float4 depths0;
 		float4 depths1;
@@ -404,35 +438,40 @@ float4 static_sh_ps(screen_output IN) : COLOR
 		}
 
 	}
-	
-//	return 0.25f + 0.75f * exp2(-0.018f * occlusion*occlusion);
-	float4 result=	CHANNEL_OFFSET + CHANNEL_SCALE * max(1-fade, exp2(CURVE_SIGMA * occlusion*occlusion));
-//	clip(0.98f - min(result.r, result.a));		// for pixel stats
-	return result;
-#endif
+
+	//	return 0.25f + 0.75f * exp2(-0.018f * occlusion*occlusion);
+	float4 result = CHANNEL_OFFSET + CHANNEL_SCALE * max(1 - fade, exp2(CURVE_SIGMA * occlusion*occlusion));
+	//	clip(0.98f - min(result.r, result.a));		// for pixel stats
+		return result;
+	#endif
 }
 
 
 // screenshot version
 
-float4 shadow_generate_ps(screen_output IN) : COLOR
+float4 shadow_generate_ps(screen_output IN) : SV_Target
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return 1.0f;
 #else
 
 	float2 texcoord= IN.texcoord;
-	
+
 	float occlusion=	0.0f;
 	float fade=			1.0f;
 	float sample_count=	0.0f;
-	
+
 	{
 		float inv_center_depth;
+#ifdef xenon
 		asm
 		{
 			tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
 		};
+#elif DX_VERSION == 11
+		inv_center_depth= sample2D(depth_sampler, texcoord).r;
+#endif
+
 		inv_center_depth=	(local_depth_constants.x + inv_center_depth * local_depth_constants.y);
 		float center_depth=	1.0f / inv_center_depth;
 
@@ -442,39 +481,53 @@ float4 shadow_generate_ps(screen_output IN) : COLOR
 		{
 			float relative_y=			y / SCREENSHOT_RADIUS_Y;
 			float relative_y_squared=	relative_y * relative_y;
-			
+
 			float x_start=	(y % 2);								// we don't sample every pixel, we sample every other one in a checkerboard pattern
-			
+
 			for (float x= x_start; x <= SCREENSHOT_RADIUS_X; x += 2)
 			{
 				float relative_x=		x / SCREENSHOT_RADIUS_X;
 				float distance_squared=	(relative_x * relative_x + relative_y_squared);
-				
+
 				if (distance_squared <= 1.0f)
 				{
 					float4 depths0;
 					float4 depths1;
 					{
+#ifdef xenon
 						[isolate]
+#endif
 						float2 offset0=		texcoord + pixel_size.xy * float2( x,  y);
 						float2 offset1=		texcoord + pixel_size.xy * float2(-x, -y);
+#ifdef xenon
 						asm
 						{
 							tfetch2D	depths0.rgba, offset0, depth_low_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled
 							tfetch2D	depths1.rgba, offset1, depth_low_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled
 						};
+#elif DX_VERSION == 11
+						depths0= sample2D(depth_low_sampler, offset0);
+						depths1= sample2D(depth_low_sampler, offset1);
+#endif
 					}
-					occlusion	+=	calc_occlusion_samples(depths0.xyzw, depths1.xyzw, center_depth); 
+					occlusion	+=	calc_occlusion_samples(depths0.xyzw, depths1.xyzw, center_depth);
 					sample_count+=	8.0f;
 					{
+#ifdef xenon
 						[isolate]
+#endif
 						float2 offset0=		texcoord + pixel_size.xy * float2(-x,  y);
 						float2 offset1=		texcoord + pixel_size.xy * float2( x, -y);
+#ifdef xenon
 						asm
 						{
 							tfetch2D	depths0.rgba, offset0, depth_low_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled
 							tfetch2D	depths1.rgba, offset1, depth_low_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled
 						};
+#elif DX_VERSION == 11
+						depths0= sample2D(depth_low_sampler, offset0);
+						depths1= sample2D(depth_low_sampler, offset1);
+#endif
 					}
 					occlusion	+=	calc_occlusion_samples(depths0.xyzw, depths1.xyzw, center_depth);
 					sample_count+=	8.0f;
@@ -482,16 +535,110 @@ float4 shadow_generate_ps(screen_output IN) : COLOR
 			}
 		}
 	}
-		
+
 	occlusion /= sample_count;
-	
+
 	return CHANNEL_OFFSET + CHANNEL_SCALE * max(1-fade, exp2(CURVE_SIGMA2 * occlusion*occlusion));
 #endif
 }
 
 
 // mask debug
-float4 active_camo_ps(screen_output IN) : COLOR
+float4 active_camo_ps(screen_output IN) : SV_Target
 {
 	return 0.0f;
+}
+
+[maxtempreg(5)]
+float4 static_nv_sh_ps(screen_output IN) : SV_Target
+{
+#if defined(pc) && (DX_VERSION == 9)
+	return 1.0f;
+#else
+	float2 texcoord = IN.texcoord;
+
+	//	float mask;
+	//	asm
+	//	{
+	//		tfetch2D	mask.r___, texcoord, mask_sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= +0.0, OffsetY= +0.0
+	//	};
+
+	float occlusion = 0.0f;
+	float fade = 1.0f;
+
+	//	[predicateBlock]
+	//	if (mask > 0.0f)
+	{
+		float inv_center_depth;
+#ifdef xenon
+		asm
+		{
+			tfetch2D	inv_center_depth.r___, texcoord, depth_sampler, MagFilter = point, MinFilter = point, MipFilter = point, AnisoFilter = disabled, OffsetX = +0.0, OffsetY = +0.0
+		};
+#elif DX_VERSION == 11
+		inv_center_depth = sample2D(depth_sampler, texcoord).r;
+#endif
+
+		inv_center_depth = (local_depth_constants.x + inv_center_depth * local_depth_constants.y);
+		float center_depth = 1.0f / inv_center_depth;
+
+		fade = calculate_fade(center_depth);
+
+		float sample_a;
+		float sample_b;
+		sample_a = sample2D(depth_low_sampler, texcoord + float2(-pixel_size.x, 0.f)).r;
+		sample_b = sample2D(depth_low_sampler, texcoord + float2(pixel_size.x, 0.f)).r;
+		float ddx = (sample_b - sample_a) * 0.5f;
+
+		sample_a = sample2D(depth_low_sampler, texcoord + float2(0.f, -pixel_size.y)).r;
+		sample_b = sample2D(depth_low_sampler, texcoord + float2(0.f, pixel_size.y)).r;
+		float ddy = (sample_b - sample_a) * 0.5f;
+
+		float2 depth_gradient = float2(ddx, ddy);
+
+		float depth_dir = dot(depth_gradient, float2(1.f, 0.f)) > 0.f ? 0.5 : -0.5;
+
+		float4 depths0;
+		float4 depths1;
+
+		float2 offset;
+
+		offset = float2(3.5f, 2.f);
+		depths0 = sample2D(depth_low_sampler, texcoord + (-offset.xy + depth_dir.xx) * pixel_size.xy);
+		depths1 = sample2D(depth_low_sampler, texcoord + (offset.xy + depth_dir.xx) * pixel_size.xy);
+		occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+
+		depths0 = sample2D(depth_low_sampler, texcoord + (offset.yx * float2(-1.f, 1.f) + depth_dir.xx) * pixel_size.xy);
+		depths1 = sample2D(depth_low_sampler, texcoord + (offset.yx * float2(1.f, -1.f) + depth_dir.xx) * pixel_size.xy);
+		occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+
+		offset = float2(2.0f, 4.f);
+		depths0 = sample2D(depth_low_sampler, texcoord + (-offset.xy + depth_dir.xx) * pixel_size.xy);
+		depths1 = sample2D(depth_low_sampler, texcoord + (offset.xy + depth_dir.xx) * pixel_size.xy);
+		occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+
+		depths0 = sample2D(depth_low_sampler, texcoord + (offset.yx * float2(-1.f, 1.f) + depth_dir.xx) * pixel_size.xy);
+		depths1 = sample2D(depth_low_sampler, texcoord + (offset.yx * float2(1.f, -1.f) + depth_dir.xx) * pixel_size.xy);
+		occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+
+		// this if causes more ghosting around edges, but is a big perf win.   I wish we could afford to leave it out  :(
+		if (occlusion > 1.0f)
+		{
+			offset = float2(1.0f, 1.5f);
+			depths0 = sample2D(depth_low_sampler, texcoord + (-offset.xy + depth_dir.xx) * pixel_size.xy);
+			depths1 = sample2D(depth_low_sampler, texcoord + (offset.xy + depth_dir.xx) * pixel_size.xy);
+			occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+
+			offset = float2(0.f, 2.5f);
+			depths0 = sample2D(depth_low_sampler, texcoord + (-offset.xy + depth_dir.xx) * pixel_size.xy);
+			depths1 = sample2D(depth_low_sampler, texcoord + (offset.xy + depth_dir.xx) * pixel_size.xy);
+			occlusion += calc_occlusion_samples(depths0, depths1, center_depth);
+		}
+	}
+
+	//	return 0.25f + 0.75f * exp2(-0.018f * occlusion*occlusion);
+	float4 result = CHANNEL_OFFSET + CHANNEL_SCALE * max(1 - fade, exp2(CURVE_SIGMA * occlusion*occlusion));
+	//	clip(0.98f - min(result.r, result.a));		// for pixel stats
+	return result;
+	#endif
 }

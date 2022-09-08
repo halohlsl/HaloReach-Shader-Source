@@ -26,11 +26,13 @@
 	#undef PIXEL_REGISTER
 
 
+#if DX_VERSION == 9
 #if defined(VERTEX_SHADER)
 	#define always_true vs_always_true
 #else // PIXEL_SHADER
 	#define always_true ps_always_true
 #endif // PIXEL_SHADER
+#endif
 
 
 // ###ctchou $TODO  find more appropriate locations for all these definitions..   some need to be included before all instances of hlsl_constant_global_list.h:
@@ -78,5 +80,5 @@
 #define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
 
 
-	
+
 #endif // __HLSL_CONSTANT_GLOBALS_FX

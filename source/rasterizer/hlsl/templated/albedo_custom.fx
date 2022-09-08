@@ -4,28 +4,28 @@
 // WATERFALL
 //
 
-sampler		waterfall_base_mask;
-float4		waterfall_base_mask_xform;
-sampler		waterfall_layer0;
-float4		waterfall_layer0_xform;
-sampler		waterfall_layer1;
-float4		waterfall_layer1_xform;
-sampler		waterfall_layer2;
-float4		waterfall_layer2_xform;
+PARAM_SAMPLER_2D(waterfall_base_mask);
+PARAM(float4, waterfall_base_mask_xform);
+PARAM_SAMPLER_2D(waterfall_layer0);
+PARAM(float4, waterfall_layer0_xform);
+PARAM_SAMPLER_2D(waterfall_layer1);
+PARAM(float4, waterfall_layer1_xform);
+PARAM_SAMPLER_2D(waterfall_layer2);
+PARAM(float4, waterfall_layer2_xform);
 
-float		transparency_frothy_weight;
-float		transparency_base_weight;
-float		transparency_bias;
+PARAM(float, transparency_frothy_weight);
+PARAM(float, transparency_base_weight);
+PARAM(float, transparency_bias);
 
 void calc_albedo_waterfall_ps(
 	in float2 texcoord,
 	out float4 albedo,
 	in float3 normal)
 {
-	float4 base_mask=		tex2D(waterfall_base_mask,	transform_texcoord(texcoord,	waterfall_base_mask_xform));
-	float4 layer0=			tex2D(waterfall_layer0,		transform_texcoord(texcoord,	waterfall_layer0_xform));
-	float4 layer1=			tex2D(waterfall_layer1,		transform_texcoord(texcoord,	waterfall_layer1_xform));
-	float4 layer2=			tex2D(waterfall_layer2,		transform_texcoord(texcoord,	waterfall_layer2_xform));
+	float4 base_mask=		sample2D(waterfall_base_mask,	transform_texcoord(texcoord,	waterfall_base_mask_xform));
+	float4 layer0=			sample2D(waterfall_layer0,		transform_texcoord(texcoord,	waterfall_layer0_xform));
+	float4 layer1=			sample2D(waterfall_layer1,		transform_texcoord(texcoord,	waterfall_layer1_xform));
+	float4 layer2=			sample2D(waterfall_layer2,		transform_texcoord(texcoord,	waterfall_layer2_xform));
 
 /*
 	float4 layer01=			lerp(layer0, layer1, layer1.w);														// alpha blend layer 1 on top of layer 0
@@ -37,7 +37,7 @@ void calc_albedo_waterfall_ps(
 	float4 frothy_color=		(layer0 * layer1 * layer2);
 	float frothy_transparency=	layer1.a + layer0.a + layer2.a;
 
-	albedo.rgb=		frothy_color * base_mask.rgb;
+	albedo.rgb=		frothy_color.rgb * base_mask.rgb;
 	albedo.a=		clamp(transparency_frothy_weight*frothy_transparency + transparency_base_weight*base_mask.a + transparency_bias, 0.0f, 1.0f);
 	
 	apply_pc_albedo_modifier(albedo, normal);

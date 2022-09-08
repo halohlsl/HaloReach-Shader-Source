@@ -12,7 +12,7 @@ float sample_percentage_closer_point(float3 fragment_shadow_position, float dept
 
 float sample_percentage_closer_point(float3 fragment_shadow_position, float depth_bias)
 {
-	float shadow_depth= tex2D(shadow, fragment_shadow_position.xy).r;
+	float shadow_depth= sample2D(shadow, fragment_shadow_position.xy).r;
 	float depth_disparity= fragment_shadow_position.z - shadow_depth;
 	return step(depth_disparity, depth_bias);
 }

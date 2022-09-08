@@ -100,39 +100,59 @@ float cone_face_testing(
 }
 
 // calculate tessellation level
-void water_tessellation_vs( s_vertex_type_water_tessellation IN )
+#ifdef pc
+   float4 water_tessellation_vs( s_vertex_type_water_tessellation IN ) : SV_Position
+#else
+   void water_tessellation_vs( s_vertex_type_water_tessellation IN )
+#endif
 {
 	static float4 x_const01= { 0, 1, 0, 0 };
 	float level0, level1, level2;
 
 	// indices of vertices
-	int index= IN.index + k_vs_water_index_offset.x;
+#ifndef pc
+	int index= IN.index + k_water_index_offset.x;
+#endif
 
 
+#ifndef pc
 	if ( k_is_under_screenshot ) 
 	{
 		level0= level1= level2= MAX_TESS_LEVEL;
 	}
 	else
+#endif
 	{
 		float4 v_index0, v_index1, v_index2;
+#ifndef pc
 		asm {
 			vfetch v_index0, index, color0
 			vfetch v_index1, index, color1
 			vfetch v_index2, index, color2
 		};
+#else
+      v_index0 = 0;
+      v_index1 = 0;
+      v_index2 = 0;
+#endif
 
 		// positions of vertices in world space
 		float4 v_pos0, v_pos1, v_pos2;
+#ifndef pc
 		asm {
 			vfetch v_pos0, v_index0.x, position0
 			vfetch v_pos1, v_index1.x, position0
 			vfetch v_pos2, v_index2.x, position0
 		};
+#else
+      v_pos0 = 0;
+      v_pos1 = 0;
+      v_pos2 = 0;
+#endif
 
-		level0= edge_tess_level(k_vs_tess_camera_position, v_pos0.xyz, v_pos1.xyz, k_vs_tess_camera_diagonal.x);
-		level1= edge_tess_level(k_vs_tess_camera_position, v_pos1.xyz, v_pos2.xyz, k_vs_tess_camera_diagonal.x);
-		level2= edge_tess_level(k_vs_tess_camera_position, v_pos2.xyz, v_pos0.xyz, k_vs_tess_camera_diagonal.x);
+		level0= edge_tess_level(k_vs_tess_camera_position.xyz, v_pos0.xyz, v_pos1.xyz, k_vs_tess_camera_diagonal.x);
+		level1= edge_tess_level(k_vs_tess_camera_position.xyz, v_pos1.xyz, v_pos2.xyz, k_vs_tess_camera_diagonal.x);
+		level2= edge_tess_level(k_vs_tess_camera_position.xyz, v_pos2.xyz, v_pos0.xyz, k_vs_tess_camera_diagonal.x);
 
 		float is_visible= cone_face_testing(
 							k_vs_tess_camera_position.xyz,
@@ -151,6 +171,11 @@ void water_tessellation_vs( s_vertex_type_water_tessellation IN )
 		level2*= is_visible;
 	}
 
+#ifdef pc
+
+   return float4(0,0,0,0);
+   
+#else
 	int out_index_0= index*3;
 	int out_index_1= index*3 + 1;
 	int out_index_2= index*3 + 2;	
@@ -159,15 +184,15 @@ void water_tessellation_vs( s_vertex_type_water_tessellation IN )
 	asm
     {
 		alloc export= 1
-		mad eA, out_index_0, x_const01, k_vs_water_memexport_addr
+		mad eA, out_index_0, x_const01, k_water_memexport_addr
 		mov eM0, level0
 
 		alloc export= 1
-		mad eA, out_index_1, x_const01, k_vs_water_memexport_addr		
+		mad eA, out_index_1, x_const01, k_water_memexport_addr		
 		mov eM0, level1
 
 		alloc export= 1
-		mad eA, out_index_2, x_const01, k_vs_water_memexport_addr
+		mad eA, out_index_2, x_const01, k_water_memexport_addr
 		mov eM0, level2
     };
 
@@ -181,6 +206,8 @@ void water_tessellation_vs( s_vertex_type_water_tessellation IN )
 	alloc export=1
 		mad eA.xyzw, hidden_from_compiler.z, hidden_from_compiler.zzzz, hidden_from_compiler.zzzz
 	};
+#endif
+	
 }
 
 #endif //VERTEX_SHADER
@@ -189,7 +216,7 @@ void water_tessellation_vs( s_vertex_type_water_tessellation IN )
 
 
 //	should never been executed
-float4 water_tessellation_ps( void ) :COLOR0
+float4 water_tessellation_ps( SCREEN_POSITION_INPUT(screen_position) ) :SV_Target0
 {
 	return float4(0,1,2,3);
 }

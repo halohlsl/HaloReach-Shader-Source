@@ -13,13 +13,13 @@
 
 // ==== SHADER DOCUMENTATION
 // shader: chud_simple
-// 
+//
 // ---- COLOR OUTPUTS
 // color output A= primary background color
 // color output B= secondary background color
 // color output C= highlight color
 // color output D= flash color
-// 
+//
 // ---- SCALAR OUTPUTS
 // scalar output A= flash value; if 1, uses 'flash color', if 0 uses blended primary/secondary background
 // scalar output B= unused
@@ -37,12 +37,12 @@
 chud_output default_vs(vertex_type IN)
 {
     chud_output OUT;
-    
+
     float3 virtual_position= chud_local_to_virtual(IN.position.xy);
     OUT.MicroTexcoord= virtual_position.xy/4;
     OUT.HPosition= chud_virtual_to_screen(virtual_position);
 	OUT.Texcoord= IN.texcoord.xy*chud_texture_transform.xy + chud_texture_transform.zw;
-	
+
     return OUT;
 }
 
@@ -60,7 +60,7 @@ float4 build_subpixel_result_shared(float4 bitmap_result )
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 	return build_subpixel_result_shared(bitmap_result);
 }
 
@@ -69,7 +69,7 @@ float2 build_subsample_texcoord(float2 texcoord, float4 gradients, float dh, flo
 	float2 result= texcoord;
 	result+= gradients.xz*dh;
 	result+= gradients.yw*dv;
-	
+
 	return result;
 }
 
@@ -82,19 +82,19 @@ float4 texture_lookup(float2 texcoord)
 	};
 	return bitmap_result;
 #else
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 	return bitmap_result;
 #endif
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 #ifndef pc
 	float2 texcoord= IN.Texcoord;
-	
+
 	float4 result= texture_lookup(texcoord);
-	result= build_subpixel_result_shared(result);	
+	result= build_subpixel_result_shared(result);
 #else // pc
 	float4 result= build_subpixel_result(IN.Texcoord);
 #endif // pc

@@ -1,7 +1,7 @@
 /*
 WATER_SHADING.FX
 Copyright (c) Microsoft Corporation, 2005. all rights reserved.
-04/12/2006 13:36 davcook	
+04/12/2006 13:36 davcook
 */
 
 //#include "shared\atmosphere.fx"
@@ -17,15 +17,48 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 /* vertex shader implementation */
 #ifdef VERTEX_SHADER
 
+#if DX_VERSION == 9
+#define CATEGORY_PARAM(_name) PARAM(int, _name)
+#elif DX_VERSION == 11
+#define CATEGORY_PARAM(_name) PARAM(float, _name)
+#endif
+
 // If the categories are not defined by the preprocessor, treat them as shader constants set by the game.
 // We could automatically prepend this to the shader file when doing generate-templates, hmmm...
 #ifndef category_global_shape
-extern int category_global_shape;
+CATEGORY_PARAM(category_global_shape);
 #endif
 
 #ifndef category_waveshape
-extern int category_waveshape;
+CATEGORY_PARAM(category_waveshape);
 #endif
+
+float barycentric_interpolate(
+			float a,
+			float b,
+			float c,
+			float3 weights)
+{
+	return a*weights.z + b*weights.y + c*weights.x;
+}
+
+float2 barycentric_interpolate(
+			float2 a,
+			float2 b,
+			float2 c,
+			float3 weights)
+{
+	return a*weights.z + b*weights.y + c*weights.x;
+}
+
+float3 barycentric_interpolate(
+			float3 a,
+			float3 b,
+			float3 c,
+			float3 weights)
+{
+	return a*weights.z + b*weights.y + c*weights.x;
+}
 
 float4 barycentric_interpolate(
 			float4 a,
@@ -42,22 +75,31 @@ s_water_render_vertex get_tessellated_vertex( s_vertex_type_water_shading IN )
 	s_water_render_vertex OUT;
 
 	// indices of vertices
-	int index= IN.index + k_vs_water_index_offset.x;
+#ifdef pc
+	int index= 0;
+#else
+	int index= IN.index + k_water_index_offset.x;
+#endif
 	float4 v_index0, v_index1, v_index2;
+#ifdef pc
+   v_index0 = 0;
+   v_index1 = 0;
+   v_index2 = 0;
+#else
 	asm {
 		vfetch v_index0, index, color0
 		vfetch v_index1, index, color1
 		vfetch v_index2, index, color2
 	};
-
+#endif
 	//	fetch vertex porpertices
 	float4 pos0, pos1, pos2;
 	float4 tex0, tex1, tex2;
 	float4 nml0, nml1, nml2;
-	float4 tan0, tan1, tan2;	
+	float4 tan0, tan1, tan2;
 	float4 btex0, btex1, btex2;
 	float4 lm_tex0, lm_tex1, lm_tex2;
-	
+
 
 	int v0_index_mesh= v_index0.x;
 	int v0_index_water= v_index0.y;
@@ -67,7 +109,28 @@ s_water_render_vertex get_tessellated_vertex( s_vertex_type_water_shading IN )
 
 	int v2_index_mesh= v_index2.x;
 	int v2_index_water= v_index2.y;
+#ifdef pc
+	pos0 = float4(0,0,0,0);
+	tex0 = float4(0,0,0,0);
+	nml0 = float4(0,0,1,0);
+	tan0 = float4(1,0,0,0);
+	lm_tex0 = float4(0,0,0,0);
+	btex0 = float4(0,0,0,0);
 
+	pos1 = float4(0,0,0,0);
+	tex1 = float4(0,0,0,0);
+	nml1 = float4(0,0,1,0);
+	tan1 = float4(1,0,0,0);
+	lm_tex1 = float4(0,0,0,0);
+	btex1 = float4(0,0,0,0);
+
+	pos2 = float4(0,0,0,0);
+	tex2 = float4(0,0,0,0);
+	nml2 = float4(0,0,1,0);
+	tan2 = float4(1,0,0,0);
+	lm_tex2 = float4(0,0,0,0);
+	btex2 = float4(0,0,0,0);
+#else
 	asm {
 		vfetch pos0, v0_index_mesh, position0
 		vfetch tex0, v0_index_mesh, texcoord0
@@ -90,25 +153,29 @@ s_water_render_vertex get_tessellated_vertex( s_vertex_type_water_shading IN )
 		vfetch lm_tex2, v2_index_mesh, texcoord1
 		vfetch btex2, v2_index_water, position1
 	};
-
+#endif
 	// re-order the weights based on the QuadID
+#ifdef pc
+	float3 weights = float3(1, 0, 0);
+#else
 	float3 weights= IN.uvw * (0==IN.quad_id);
 	weights+= IN.uvw.zxy * (1==IN.quad_id);
-	weights+= IN.uvw.yzx * (2==IN.quad_id); 
-	weights+= IN.uvw.xzy * (4==IN.quad_id); 
+	weights+= IN.uvw.yzx * (2==IN.quad_id);
+	weights+= IN.uvw.xzy * (4==IN.quad_id);
 	weights+= IN.uvw.yxz * (5==IN.quad_id);
 	weights+= IN.uvw.zyx * (6==IN.quad_id);
+#endif
 
-	// interpoate otuput		
+	// interpoate otuput
 	OUT.position= barycentric_interpolate(pos0, pos1, pos2, weights);
 	OUT.texcoord= barycentric_interpolate(tex0, tex1, tex2, weights);
 
 	OUT.normal= barycentric_interpolate(nml0, nml1, nml2, weights);
 	OUT.tangent= barycentric_interpolate(tan0, tan1, tan2, weights);
-	
+
 	OUT.base_tex= barycentric_interpolate(btex0, btex1, btex2, weights);
 	OUT.lm_tex= barycentric_interpolate(lm_tex0, lm_tex1, lm_tex2, weights);
-	
+
 
 	OUT.normal= normalize(OUT.normal);
 	OUT.tangent= normalize(OUT.tangent);
@@ -120,18 +187,109 @@ s_water_render_vertex get_tessellated_vertex( s_vertex_type_water_shading IN )
 }
 
 // get vertex properties
-s_water_render_vertex get_vertex( 
+#ifdef pc
+s_water_render_vertex get_vertex( s_vertex_type_water_shading IN, const bool has_per_vertex_lighting )
+{
+	s_water_render_vertex OUT;
+#ifndef PC_WATER_TESSELLATION
+
+	OUT.position = float4(IN.position, 1);
+	OUT.texcoord = float4(IN.texcoord, 0, 0);
+	OUT.normal   = float4(IN.normal, 0);
+	OUT.tangent  = float4(IN.tangent, 0);
+	OUT.binormal =-float4(IN.binormal, 0); // ###xwan inversion binormal to right hand
+
+	OUT.base_tex = float4(IN.base_texcoord, 0);
+	OUT.lm_tex = float4(IN.lm_tex, 0, 0);
+#else
+
+	float3 bc = IN.bc;
+
+	// unpack data structures
+	float3 position1 = float3(IN.pos1xyz_tc1x.x, IN.pos1xyz_tc1x.y, IN.pos1xyz_tc1x.z);
+	float2 texcoord1 = float2(IN.pos1xyz_tc1x.w, IN.tc1y_tan1xyz.x);
+	float3 tangent1  = float3(IN.tc1y_tan1xyz.y, IN.tc1y_tan1xyz.z, IN.tc1y_tan1xyz.w);
+	float3 binormal1 = float3(IN.bin1xyz_lm1x.x, IN.bin1xyz_lm1x.y, IN.bin1xyz_lm1x.z);
+	float2 lm1       = float2(IN.bin1xyz_lm1x.w, IN.lm1y_mi1_pos2xy.x);
+	float mi1        = IN.lm1y_mi1_pos2xy.y;
+
+	float3 position2 = float3(IN.lm1y_mi1_pos2xy.z, IN.lm1y_mi1_pos2xy.w, IN.posz_tc2xy_tan2x.x);
+	float2 texcoord2 = float2(IN.posz_tc2xy_tan2x.y, IN.posz_tc2xy_tan2x.z);
+	float3 tangent2  = float3(IN.posz_tc2xy_tan2x.w, IN.tan2yz_bin2xy.x, IN.tan2yz_bin2xy.y);
+	float3 binormal2 = float3(IN.tan2yz_bin2xy.z, IN.tan2yz_bin2xy.w, IN.bin2z_lm2xy_mi2.x);
+	float2 lm2       = float2(IN.bin2z_lm2xy_mi2.y, IN.bin2z_lm2xy_mi2.z);
+	float mi2        = IN.bin2z_lm2xy_mi2.w;
+
+	float3 position3 = float3(IN.pos3xyz_tc3x.x, IN.pos3xyz_tc3x.y, IN.pos3xyz_tc3x.z);
+	float2 texcoord3 = float2(IN.pos3xyz_tc3x.w, IN.tc3y_tan3xyz.x);
+	float3 tangent3  = float3(IN.tc3y_tan3xyz.y, IN.tc3y_tan3xyz.z, IN.tc3y_tan3xyz.w);
+	float3 binormal3 = float3(IN.bin3xyz_lm3x.x, IN.bin3xyz_lm3x.y, IN.bin3xyz_lm3x.z);
+	float2 lm3       = float2(IN.bin3xyz_lm3x.w, IN.lm3y_mi3.x);
+	float mi3		 = IN.lm3y_mi3.y;
+
+	// unpack append data
+	float3 base_tex1   = float3(IN.bt1xy_bt2xy.xy, 0);
+	float3 base_tex2   = float3(IN.bt1xy_bt2xy.zw, 0);
+	float3 base_tex3   = float3(IN.bt3xy.xy, 0);
+
+	// interpolate
+	OUT.position = float4(barycentric_interpolate(position1, position2, position3, bc), 1);
+	OUT.texcoord = float4(barycentric_interpolate(texcoord1, texcoord2, texcoord3, bc), 0, 0);
+	OUT.tangent  = float4(barycentric_interpolate(tangent1,  tangent2,  tangent3,  bc), 0);
+	OUT.binormal =-float4(barycentric_interpolate(binormal1, binormal2, binormal3, bc), 0);
+	OUT.lm_tex 	 = float4(barycentric_interpolate(lm1, lm2, lm3, bc), 0, 0);
+
+	OUT.base_tex    = float4(barycentric_interpolate(base_tex1, base_tex2, base_tex3, bc), 0);
+
+	// calculate normal
+	OUT.tangent = normalize(OUT.tangent);
+	OUT.binormal= normalize(OUT.binormal);
+	// ###xwan to save vfetch number, normal is generated by tangent and binormal
+	OUT.normal.xyz= cross(OUT.tangent.xyz, OUT.binormal.xyz);
+	OUT.normal= float4(normalize(OUT.normal.xyz), 0);
+
+	if (has_per_vertex_lighting)
+	{
+	    float4 vmf_light0_1, vmf_light0_2, vmf_light0_3;
+		float4 vmf_light1_1, vmf_light1_2, vmf_light1_3;
+
+		int vertex_index_after_offset_1= int(mi1) - per_vertex_lighting_offset.x;
+		int vertex_index_after_offset_2= int(mi2) - per_vertex_lighting_offset.x;
+		int vertex_index_after_offset_3= int(mi3) - per_vertex_lighting_offset.x;
+
+		fetch_stream(vertex_index_after_offset_1, vmf_light0_1, vmf_light1_1);
+		fetch_stream(vertex_index_after_offset_2, vmf_light0_2, vmf_light1_2);
+		fetch_stream(vertex_index_after_offset_3, vmf_light0_3, vmf_light1_3);
+
+		float4 vmf0_1, vmf1_1, vmf2_1, vmf3_1;
+		float4 vmf0_2, vmf1_2, vmf2_2, vmf3_2;
+		float4 vmf0_3, vmf1_3, vmf2_3, vmf3_3;
+		decompress_per_vertex_lighting_data(vmf_light0_1, vmf_light1_1, vmf0_1, vmf1_1, vmf2_1, vmf3_1);
+		decompress_per_vertex_lighting_data(vmf_light0_2, vmf_light1_2, vmf0_2, vmf1_2, vmf2_2, vmf3_2);
+		decompress_per_vertex_lighting_data(vmf_light0_3, vmf_light1_3, vmf0_3, vmf1_3, vmf2_3, vmf3_3);
+
+		OUT.vmf_intensity= barycentric_interpolate(vmf1_1.rgb + vmf0_1.a, vmf1_2.rgb + vmf0_2.a, vmf1_3.rgb + vmf0_3.a, bc);
+	}
+	else
+	{
+		OUT.vmf_intensity= 0;
+	}
+#endif
+	return OUT;
+}
+#else
+s_water_render_vertex get_vertex(
 	s_vertex_type_water_shading IN,
 	const bool has_per_vertex_lighting)
 {
 	s_water_render_vertex OUT;
 
-	// indices of vertices			
+	// indices of vertices
 	float in_index= IN.uvw.x; // ###xwan after declaration of uvw and quad_id, Xenon has mistakely put index into uvw.x. :-(
 	int t_index;
 	[isolate]
 	{
-		t_index= floor((in_index+0.3f)/3);	//	triangle index		
+		t_index= floor((in_index+0.3f)/3);	//	triangle index
 	}
 
 	int v_guid;
@@ -141,23 +299,33 @@ s_water_render_vertex get_vertex(
 		v_guid= (int) temp;
 	}
 
-	float4 v_index0, v_index1, v_index2;	
+	float4 v_index0, v_index1, v_index2;
+#ifdef pc
+
+#else
 	asm {
 		vfetch v_index0, t_index, color0
 		vfetch v_index1, t_index, color1
 		vfetch v_index2, t_index, color2
 	};
-
+#endif
 	float4 v_index= v_index0 * (0==v_guid);
 	v_index+= v_index1 * (1==v_guid);
-	v_index+= v_index2 * (2==v_guid);	
-	
+	v_index+= v_index2 * (2==v_guid);
+
 
 	//	fetch vertex porpertices
 	float4 pos, tex, nml, tan, bnl, btex, loc, lm_tex;
 	int v_index_mesh= v_index.x;
 	int v_index_water= v_index.y;
-
+#ifdef pc
+	pos = float4(0,0,0,0);
+	tex = float4(0,0,0,0);
+	nml = float4(0,0,0,0);
+	tan = float4(0,0,0,0);
+	lm_tex = float4(0,0,0,0);
+	btex = float4(0,0,0,0);
+#else
 	asm {
 		vfetch pos, v_index_mesh, position0
 		vfetch tex, v_index_mesh, texcoord0
@@ -165,17 +333,17 @@ s_water_render_vertex get_vertex(
 		vfetch tan, v_index_mesh, tangent0
 		vfetch lm_tex, v_index_mesh, texcoord1
 		vfetch btex, v_index_water, position1
-		
+
 	};
 
 	if (has_per_vertex_lighting)
 	{
 	    float4 vmf_light0;
 		float4 vmf_light1;
-	    
+
 		int vertex_index_after_offset= v_index_mesh - per_vertex_lighting_offset.x;
 		fetch_stream(vertex_index_after_offset, vmf_light0, vmf_light1);
-	 
+
 		float4 vmf0, vmf1, vmf2, vmf3;
 		decompress_per_vertex_lighting_data(vmf_light0, vmf_light1, vmf0, vmf1, vmf2, vmf3);
 
@@ -185,72 +353,75 @@ s_water_render_vertex get_vertex(
 	{
 		OUT.vmf_intensity= 0;
 	}
-	
+#endif
 	// interpoate otuput
 	OUT.position= pos;
 	OUT.texcoord= tex;
 	OUT.normal= nml;
 	OUT.tangent= tan;
 	OUT.binormal= float4(cross(OUT.normal, OUT.tangent), 0);
-	
+
 	OUT.base_tex= btex;
 	OUT.lm_tex= lm_tex;
 	OUT.position.w= 1.0f;
 	return OUT;
 }
+#endif // pc
 
 float3 restore_displacement(
 			float3 displacement,
 			float height)
 {
+#ifdef xenon
 	displacement= displacement*2.0f - 1.0f;
+#endif
 	displacement*= height;
 	return displacement;
 }
 
 float3 apply_choppiness(
-			float3 displacement,			
+			float3 displacement,
 			float chop_forward,
 			float chop_backward,
 			float chop_side)
-{	
+{
 	displacement.y*= chop_side;	//	backward choppiness
-	displacement.x*= (displacement.x<0) ? chop_forward : chop_backward; //forward scale, y backword scale		
+	displacement.x*= (displacement.x<0) ? chop_forward : chop_backward; //forward scale, y backword scale
 	return displacement;
 }
 
 float2 calculate_ripple_coordinate_by_world_position(
 			float2 position)
 {
-	float2 texcoord_ripple= (position - Camera_Position.xy) / k_ripple_buffer_radius;		
-	float len= length(texcoord_ripple);		
-	texcoord_ripple*= rsqrt(len);		
+	float2 texcoord_ripple= (position - Camera_Position.xy) / k_ripple_buffer_radius;
+	float len= length(texcoord_ripple);
+	texcoord_ripple*= rsqrt(len);
 
 	texcoord_ripple+= k_view_dependent_buffer_center_shifting;
 	texcoord_ripple= texcoord_ripple*0.5f + 0.5f;
 	texcoord_ripple= saturate(texcoord_ripple);
 	return texcoord_ripple;
 }
-			
 
-// transform vertex position, normal etc accroding to wave 
-s_water_interpolators transform_vertex( 
+
+// transform vertex position, normal etc accroding to wave
+s_water_interpolators transform_vertex(
 	s_water_render_vertex IN,
 	const bool has_per_vertex_lighting)
-{	
+{
 	//	vertex to eye displacement
 	float4 incident_ws;
-	incident_ws.xyz= Camera_Position - IN.position.xyz;		
+	incident_ws.xyz= Camera_Position - IN.position.xyz;
 	incident_ws.w= length(incident_ws.xyz);
 	incident_ws.xyz= normalize(incident_ws.xyz);
-	float mipmap_level= max(incident_ws.w / wave_visual_damping_distance, 0.0f); 		
+	float mipmap_level= max(incident_ws.w / wave_visual_damping_distance, 0.0f);
 
 	// apply global shape control
 	float height_scale_global= 1.0f;
 	float choppy_scale_global= 1.0f;
 	if (TEST_CATEGORY_OPTION(global_shape, paint))
 	{
-		float4 shape_control= tex2Dlod(global_shape_texture, float4(transform_texcoord(IN.base_tex.xy, global_shape_texture_xform), 0, mipmap_level));
+		float4 shape_control= sample2Dlod(global_shape_texture, transform_texcoord(IN.base_tex.xy, global_shape_texture_xform), mipmap_level);
 		height_scale_global= shape_control.x;
 		choppy_scale_global= shape_control.y;
 	}
@@ -259,28 +430,48 @@ s_water_interpolators transform_vertex(
 	float4 position= IN.position;
 
 	float4 original_texcoord= IN.texcoord;
-	float2 texcoord_ripple= 0.0f;	
-	
-	if (k_is_water_tessellated)	
-	{			
+	float2 texcoord_ripple= 0.0f;
+
+	if (k_is_water_tessellated)
+	{
 		float3 displacement= 0.0f;
 		if (TEST_CATEGORY_OPTION(waveshape, default))
-		{	
+		{
 			//	re-assemble constants
-			float4 texcoord= float4(transform_texcoord(original_texcoord.xy, wave_displacement_array_xform),  time_warp, mipmap_level);		
+			float4 texcoord= float4(transform_texcoord(original_texcoord.xy, wave_displacement_array_xform),  time_warp, mipmap_level);
 			float4 texcoord_aux= float4(transform_texcoord(original_texcoord.xy, wave_slope_array_xform),  time_warp_aux, mipmap_level);
 
-			// dirty hack to work around the texture fetch bug of screenshot on Xenon			
-			if ( k_is_under_screenshot ) 
-			{
-				texcoord.w= 0.0f;
-				texcoord_aux.w= 0.0f;
-			}
+         #ifndef pc
+			   // dirty hack to work around the texture fetch bug of screenshot on Xenon
+			   if ( k_is_under_screenshot )
+			   {
+				   texcoord.w= 0.0f;
+				   texcoord_aux.w= 0.0f;
+			   }
+			#endif
 
-			displacement= tex3Dlod(wave_displacement_array, texcoord).xyz;			
-			float3 displacement_aux= tex3Dlod(wave_displacement_array, texcoord_aux).xyz;		
+#if DX_VERSION == 9
+			displacement= sample3Dlod(wave_displacement_array, texcoord.xyz, texcoord.w).xyz;
+			float3 displacement_aux= sample3Dlod(wave_displacement_array, texcoord_aux.xyz, texcoord_aux.w).xyz;
+#elif DX_VERSION == 11
+			float4 array_texcoord = convert_3d_texture_coord_to_array_texture(wave_displacement_array, texcoord.xyz);
+			float4 array_texcoord_aux = convert_3d_texture_coord_to_array_texture(wave_displacement_array, texcoord_aux.xyz);
+			float array_texcoord_t = frac(array_texcoord.z);
+			float array_texcoord_aux_t = frac(array_texcoord_aux.z);
+			array_texcoord.zw = floor(array_texcoord.zw);
+			array_texcoord_aux.zw = floor(array_texcoord_aux.zw);
+
+			displacement = lerp(
+				wave_displacement_array.t.SampleLevel(wave_displacement_array.s, array_texcoord.xyz, texcoord.w),
+				wave_displacement_array.t.SampleLevel(wave_displacement_array.s, array_texcoord.xyw, texcoord.w),
+				frac(array_texcoord_t));
+			float3 displacement_aux = lerp(
+				wave_displacement_array.t.SampleLevel(wave_displacement_array.s, array_texcoord_aux.xyz, texcoord_aux.w),
+				wave_displacement_array.t.SampleLevel(wave_displacement_array.s, array_texcoord_aux.xyw, texcoord_aux.w),
+				frac(array_texcoord_aux_t));
+#endif
 			//float3 displacement_aux= 0.0f;
-			
+
 
 			// restore displacement
 			displacement= restore_displacement(
@@ -296,19 +487,19 @@ s_water_interpolators transform_vertex(
 			displacement= apply_choppiness(
 								displacement,
 								choppiness_forward * choppy_scale_global,
-								choppiness_backward * choppy_scale_global, 
+								choppiness_backward * choppy_scale_global,
 								choppiness_side * choppy_scale_global);
 
 			// apply global height control
 			displacement.z*= height_scale_global;
 		}
 
-		// get ripple texcoord		
+		// get ripple texcoord
 		if (k_is_water_interaction)
-		{			
-			texcoord_ripple= (IN.position.xy - Camera_Position.xy) / k_ripple_buffer_radius;		
-			float len= length(texcoord_ripple);		
-			texcoord_ripple*= rsqrt(len);		
+		{
+			texcoord_ripple= (IN.position.xy - Camera_Position.xy) / k_ripple_buffer_radius;
+			float len= length(texcoord_ripple);
+			texcoord_ripple*= rsqrt(len);
 
 			texcoord_ripple+= k_view_dependent_buffer_center_shifting;
 			texcoord_ripple= texcoord_ripple*0.5f + 0.5f;
@@ -316,19 +507,19 @@ s_water_interpolators transform_vertex(
 		}
 
 		// apply vertex displacement
-		position+= 
+		position+=
 			IN.tangent *displacement.x +
-			IN.binormal *displacement.y + 
+			IN.binormal *displacement.y +
 			IN.normal *displacement.z;
-		
+
 
 		// consider interaction	after displacement
 		if (k_is_water_interaction)
 		{
 			texcoord_ripple= calculate_ripple_coordinate_by_world_position(position.xy);
-			float4 ripple_hei= tex2Dlod(tex_ripple_buffer_slope_height, float4(texcoord_ripple.xy, 0, 0));		
-			
-			float ripple_height= ripple_hei.r*2.0f - 1.0f;			
+			float4 ripple_hei= sample2Dlod(tex_ripple_buffer_slope_height, texcoord_ripple.xy, 0);
+
+			float ripple_height= ripple_hei.r*2.0f - 1.0f;
 			ripple_height*= 0.2f;	//	maximune disturbance of water is 5 inchs
 
 			// low down ripple for shallow water
@@ -337,13 +528,13 @@ s_water_interpolators transform_vertex(
 			position+= IN.normal * ripple_height;
 		}
 
-		position.w= 1.0f;	
-	}	
+		position.w= 1.0f;
+	}
 	else
 	{
-		// get ripple texcoord		
+		// get ripple texcoord
 		if (k_is_water_interaction)
-		{			
+		{
 			texcoord_ripple= calculate_ripple_coordinate_by_world_position(IN.position.xy);
 		}
 	}
@@ -352,11 +543,11 @@ s_water_interpolators transform_vertex(
 	//float3 fog_extinction;
 	//float3 fog_inscatter;
 	//compute_scattering(Camera_Position, position.xyz, fog_extinction, fog_inscatter);
-	
+
 
 	s_water_interpolators OUT;
 	//OUT.position= mul( position, k_vs_water_view_xform );	//View_Projection
-	
+
 	OUT.position= mul( position, View_Projection );
 	OUT.texcoord= float4(original_texcoord.xyz, mipmap_level);
 	OUT.normal= IN.normal;
@@ -370,12 +561,12 @@ s_water_interpolators transform_vertex(
 	OUT.incident_ws= incident_ws;
 	OUT.position_ws= float4(position.xyz, 1.0f/max(incident_ws.w, 0.01f)); // one_over_camera_distance
 
-	OUT.base_tex= 
+	OUT.base_tex=
 		float4(IN.base_tex.xy, texcoord_ripple);
 
 	if (has_per_vertex_lighting)
 	{
-		OUT.lm_tex= float4(IN.vmf_intensity, 0.0f);		
+		OUT.lm_tex= float4(IN.vmf_intensity, 0.0f);
 	}
 	else
 	{
@@ -398,15 +589,25 @@ float2 compute_detail_slope(
 			float time_warp,
 			float mipmap_level)
 {
-	float2 slope_detail= 0.0f;		
+	float2 slope_detail= 0.0f;
 	if ( TEST_CATEGORY_OPTION(detail, repeat) )
 	{
 		float4 wave_detail_xform= base_texture_xform * float4(detail_slope_scale_x, detail_slope_scale_y, 1, 1);
-		float4 texcoord_detail= float4(transform_texcoord(base_texcoord, wave_detail_xform),  time_warp*detail_slope_scale_z, mipmap_level);	
+		float4 texcoord_detail= float4(transform_texcoord(base_texcoord, wave_detail_xform),  time_warp*detail_slope_scale_z, mipmap_level);
+#ifdef xenon
 		asm
 		{
 			tfetch3D slope_detail.xy, texcoord_detail.xyz, wave_slope_array, MagFilter= linear, MinFilter= linear, MipFilter= linear, VolMagFilter= linear, VolMinFilter= linear
 		};
+#elif DX_VERSION == 11
+		float4 array_texcoord = convert_3d_texture_coord_to_array_texture(wave_slope_array, texcoord_detail.xyz);
+		float array_texcoord_t = frac(array_texcoord.z);
+		array_texcoord.zw = floor(array_texcoord.zw);
+		slope_detail.xy = lerp(
+			wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyz),
+			wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyw),
+			frac(array_texcoord_t));
+#endif
 		slope_detail.xy *= detail_slope_steepness;
 	}
 
@@ -425,16 +626,26 @@ void compose_slope_default(
 	float4 texcoord= float4(transform_texcoord(texcoord_in.xy, wave_displacement_array_xform),  time_warp, mipmap_level);
 
 	float2 slope;
+#ifdef xenon
 	asm
 	{
 		tfetch3D slope.xy, texcoord.xyz, wave_slope_array, MagFilter= linear, MinFilter= linear, MipFilter= linear, VolMagFilter= linear, VolMinFilter= linear
 	};
+#elif DX_VERSION == 11
+	float4 array_texcoord = convert_3d_texture_coord_to_array_texture(wave_slope_array, texcoord.xyz);
+	float array_texcoord_t = frac(array_texcoord.z);
+	array_texcoord.zw = floor(array_texcoord.zw);
+	slope.xy = lerp(
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyz),
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyw),
+		frac(array_texcoord_t));
+#endif
 
 	wave_choppiness_ratio= 1.0f - abs(slope.x) - abs(slope.y);
 
 	float2 slope_detail= compute_detail_slope(texcoord_in.xy, wave_displacement_array_xform, time_warp, mipmap_level+1);
 
-	//	apply scale		
+	//	apply scale
 	slope_shading=	slope + slope_detail;
 }
 
@@ -446,18 +657,39 @@ void compose_slope_original(
 			out float2 slope_shading,
 			out float wave_choppiness_ratio)
 {
-	float mipmap_level= texcoord_in.w;	
+	float mipmap_level= texcoord_in.w;
 	float4 texcoord= float4(transform_texcoord(texcoord_in.xy, wave_displacement_array_xform),  time_warp, mipmap_level);
-	float4 texcoord_aux= float4(transform_texcoord(texcoord_in.xy, wave_slope_array_xform),  time_warp_aux, mipmap_level);	
+	float4 texcoord_aux= float4(transform_texcoord(texcoord_in.xy, wave_slope_array_xform),  time_warp_aux, mipmap_level);
 
 	float2 slope;
-	float2 slope_aux;	
+	float2 slope_aux;
+#if (DX_VERSION == 9) && defined(pc)
+	TFETCH_3D(slope.xy, texcoord.xyz, wave_slope_array, 0, 1);
+	slope.xy = BUMP_CONVERT(slope.xy);
+	TFETCH_3D(slope_aux.xy, texcoord_aux.xyz, wave_slope_array, 0, 1);
+	slope_aux.xy = BUMP_CONVERT(slope_aux.xy);
+#elif DX_VERSION == 11
+	float4 array_texcoord = convert_3d_texture_coord_to_array_texture(wave_slope_array, texcoord.xyz);
+	float4 array_texcoord_aux = convert_3d_texture_coord_to_array_texture(wave_slope_array, texcoord_aux.xyz);
+	float array_texcoord_t = frac(array_texcoord.z);
+	float array_texcoord_aux_t = frac(array_texcoord_aux.z);
+	array_texcoord.zw = floor(array_texcoord.zw);
+	array_texcoord_aux.zw = floor(array_texcoord_aux.zw);
 
+	slope.xy = lerp(
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyz),
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord.xyw),
+		frac(array_texcoord_t));
+	slope_aux.xy = lerp(
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord_aux.xyz),
+		wave_slope_array.t.Sample(wave_slope_array.s, array_texcoord_aux.xyw),
+		frac(array_texcoord_aux_t));
+#else
 	asm{
 		tfetch3D slope.xy, texcoord.xyz, wave_slope_array, MagFilter= linear, MinFilter= linear, MipFilter= linear, VolMagFilter= linear, VolMinFilter= linear
 		tfetch3D slope_aux.xy, texcoord_aux.xyz, wave_slope_array, MagFilter= linear, MinFilter= linear, MipFilter= linear, VolMagFilter= linear, VolMinFilter= linear
 	};
-
+#endif
 
 	float wave_choppiness_ratio_1= 1.0f - abs(slope.x) - abs(slope.y);
 	float wave_choppiness_ratio_2= 1.0f - abs(slope_aux.x) - abs(slope_aux.y);
@@ -465,7 +697,7 @@ void compose_slope_original(
 
 	float2 slope_detail= compute_detail_slope(texcoord_in.xy, wave_displacement_array_xform, time_warp, mipmap_level+1);
 
-	//	apply scale		
+	//	apply scale
 	slope_shading= 	slope + slope_aux + slope_detail;
 }
 
@@ -482,7 +714,7 @@ float compute_fresnel(
 	return saturate(r0 * eye_dot_normal * eye_dot_normal);			//pow(eye_dot_normal, 2.5);
 }
 
-float compute_fog_transparency( 
+float compute_fog_transparency(
 			float murkiness,
 			float negative_depth)
 {
@@ -490,7 +722,7 @@ float compute_fog_transparency(
 }
 
 
-float compute_fog_factor( 
+float compute_fog_factor(
 			float murkiness,
 			float depth)
 {
@@ -501,17 +733,17 @@ float3 decode_bpp16_luvw(
 	in float4 val0,
 	in float4 val1,
 	in float l_range)
-{	
+{
 	float L = val0.a * val1.a * l_range;
 	float3 uvw = val0.xyz + val1.xyz;
-	return (uvw * 2.0f - 2.0f) * L;	
+	return (uvw * 2.0f - 2.0f) * L;
 }
 
 
 float sample_depth(float2 texcoord)
 {
-#ifdef pc
-	return tex2D(depth_buffer, texcoord).r;
+#if defined(pc) || (DX_VERSION == 11)
+	return depth_buffer.Sample(scene_ldr_texture.s, texcoord).r;
 #else // xenon
 	float4 result;
 	asm
@@ -530,19 +762,26 @@ accum_pixel water_shading(
 	s_water_interpolators INTERPOLATORS,
 	uniform const bool has_per_vertex_lighting,
 	uniform const bool alpha_blend_output)			// actually uses multiply-add blend mode if true
-{			
+{
 	// interaction
-	float2 ripple_slope= 0.0f;		
+	float2 ripple_slope= 0.0f;
 	float ripple_foam_factor= 0.0f;
+
 	[branch]
-	if (k_is_water_interaction)
-	{			
-		float2 texcoord_ripple= INTERPOLATORS.base_tex.zw;		
+	if (k_is_water_interaction_ps)
+	{
+		float2 texcoord_ripple= INTERPOLATORS.base_tex.zw;
 		float4 ripple;
-		asm {tfetch2D ripple, texcoord_ripple, tex_ripple_buffer_slope_height, MagFilter= linear, MinFilter= linear};
-		ripple_slope= (ripple.gb - 0.5f) * 6.0f;	// hack		
+		#ifdef pc
+			ripple = sample2Dlod(tex_ripple_buffer_slope_height, texcoord_ripple.xy, 0);
+		#else
+			asm {tfetch2D ripple, texcoord_ripple, tex_ripple_buffer_slope_height, MagFilter= linear, MinFilter= linear};
+		#endif
+
+		ripple_slope= (ripple.gb - 0.5f) * 6.0f;	// hack
 		ripple_foam_factor= ripple.a;
-	}	
+	}
+
 
 	float ripple_slope_length= dot(abs(ripple_slope.xy), 2.0f) + 1.0f;
 
@@ -551,7 +790,7 @@ accum_pixel water_shading(
 	if (TEST_CATEGORY_OPTION(waveshape, default))
 	{
 		compose_slope_original(
-			INTERPOLATORS.texcoord, 
+			INTERPOLATORS.texcoord,
 			1.0f,
 			1.0f,
 			slope_shading,
@@ -561,7 +800,7 @@ accum_pixel water_shading(
 	{
 		// grap code from calc_bumpmap_detail_ps in bump_mapping.fx
 		float3 bump= sample_bumpmap(bump_map, transform_texcoord(INTERPOLATORS.texcoord, bump_map_xform));					// in tangent space
-		float3 detail= sample_bumpmap(bump_detail_map, transform_texcoord(INTERPOLATORS.texcoord, bump_detail_map_xform));	// in tangent space	
+		float3 detail= sample_bumpmap(bump_detail_map, transform_texcoord(INTERPOLATORS.texcoord, bump_detail_map_xform));	// in tangent space
 		bump.xy+= detail.xy;
 
 		// convert bump into slope
@@ -570,9 +809,9 @@ accum_pixel water_shading(
 	slope_shading= slope_shading * slope_scaler + ripple_slope;
 
 	float3x3 tangent_frame_matrix= { INTERPOLATORS.tangent.xyz, INTERPOLATORS.binormal.xyz, INTERPOLATORS.normal.xyz };
-	float3 normal= mul(float3(slope_shading, 1.0f), tangent_frame_matrix);	
-	normal= normalize(normal);	
-	
+	float3 normal= mul(float3(slope_shading, 1.0f), tangent_frame_matrix);
+	normal= normalize(normal);
+
 /*
 	// ###ctchou $PERF : add option for upward-facing unrotated tangent space water?
 	float3 normal;
@@ -582,8 +821,8 @@ accum_pixel water_shading(
 */
 	// apply lightmap shadow
 	float3 lightmap_intensity= 1.0f;
-	
-#ifndef pc
+
+#if (!defined(pc)) || (DX_VERSION == 11)
 	if (has_per_vertex_lighting)
 	{
 		lightmap_intensity= INTERPOLATORS.lm_tex.rgb;
@@ -599,22 +838,22 @@ accum_pixel water_shading(
 			sample_lightprobe_texture(lightmap_texcoord, vmf_coefficients);
 
 			// ###xwan it's a hack way, however, tons of content has been set by current water shaders. dangerous to change it	(###ctchou $NOTE:  I'll say)
-			lightmap_intensity= 
+			lightmap_intensity=
 				vmf_coefficients[1].rgb +		// Colors[0]*p_lightmap_compress_constant_0.x*fIntensity
 				vmf_coefficients[0].a;			// sun visibility_mask
 		}
 	}
 #endif //pc
 
-	const float one_over_camera_distance= INTERPOLATORS.position_ws.w;	
+	const float one_over_camera_distance= INTERPOLATORS.position_ws.w;
 
-	float4 water_color_from_texture= tex2D(watercolor_texture, transform_texcoord(INTERPOLATORS.base_tex.xy, watercolor_texture_xform));
-	float4 global_shape_from_texture= tex2D(global_shape_texture, transform_texcoord(INTERPOLATORS.base_tex.xy, global_shape_texture_xform));
+	float4 water_color_from_texture= sample2D(watercolor_texture, transform_texcoord(INTERPOLATORS.base_tex.xy, watercolor_texture_xform));
+	float4 global_shape_from_texture= sample2D(global_shape_texture, transform_texcoord(INTERPOLATORS.base_tex.xy, global_shape_texture_xform));
 
 	float3 water_color;
 	if (TEST_CATEGORY_OPTION(watercolor, pure))
 	{
-		water_color= water_color_pure;		
+		water_color= water_color_pure;
 	}
 	else if  (TEST_CATEGORY_OPTION(watercolor, texture))
 	{
@@ -631,7 +870,7 @@ accum_pixel water_shading(
 	{
 		bank_alpha= global_shape_from_texture.a;
 	}
-	
+
 	float3 color_refraction;
 	float3 color_refraction_bed;
 	float4 color_refraction_blend;
@@ -648,14 +887,14 @@ accum_pixel water_shading(
 		// calcuate texcoord in screen space
 		INTERPOLATORS.position_ss /= INTERPOLATORS.position_ss.w;
 		float2 texcoord_ss= INTERPOLATORS.position_ss.xy;
-	
+
 		float2 texcoord_refraction;
 		float refraction_depth;
-				
+
 		if (alpha_blend_output)
 		{
 			texcoord_refraction= texcoord_ss;
-			refraction_depth= sample_depth(texcoord_refraction);		
+			refraction_depth= sample_depth(texcoord_refraction);
 		}
 		else
 		{
@@ -666,21 +905,23 @@ accum_pixel water_shading(
 			{
 				bump *= bank_alpha;
 			}
-		
+
 			texcoord_refraction= saturate(texcoord_ss + bump);
 			refraction_depth= sample_depth(texcoord_refraction);
 
-			//	###xwan this comparision need to some tolerance to avoid dirty boundary of refraction	
+			//	###xwan this comparision need to some tolerance to avoid dirty boundary of refraction
 			texcoord_refraction= (refraction_depth<INTERPOLATORS.position_ss.z) ? texcoord_refraction : texcoord_ss;				// if point is actually closer to camera, drop refraction amount and revert to unrefracted
 //			texcoord_refraction= saturate(texcoord_ss + saturate(500*(INTERPOLATORS.position_ss.z - refraction_depth)) * bump);		// approximate depth fade out
-		
-			color_refraction= tex2D(scene_ldr_texture, texcoord_refraction);		
-//			asm 
+
+			color_refraction= sample2D(scene_ldr_texture, texcoord_refraction);
+//			asm
 //			{		// this is more accurate and eliminates the very slight halos around objects in the refracted water..  but doesn't give as nice of a blend because we drop bilinear sampling
 //				tfetch2D color_refraction.rgb_, texcoord_refraction, scene_ldr_texture, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= 0.5, OffsetY= 0.5
 //			};
-			
+
+#ifdef xenon
 			color_refraction.rgb= (color_refraction.rgb < (1.0f/(16.0f*16.0f))) ? color_refraction.rgb : (exp2(color_refraction.rgb * (16 * 8) - 8));
+#endif
 			color_refraction/= g_exposure.r;
 			color_refraction_bed= color_refraction;	//	pure color of under water stuff
 
@@ -700,12 +941,12 @@ accum_pixel water_shading(
 //		float transparency= compute_fog_transparency(water_murkiness*ripple_slope_length, refraction_depth);		// what does ripple slope length accomplish?  attempt to darken ripple edges?
 		float transparency= compute_fog_transparency(water_murkiness, negative_refraction_depth);
 		transparency *= saturate(refraction_extinct_distance * one_over_camera_distance);							// turns opaque at distance
-		
+
 		if (k_is_camera_underwater)
 		{
 			transparency*= 0.02f;
 		}
-		
+
 		if (alpha_blend_output)
 		{
 			color_refraction_blend.rgb= water_color.rgb * (1.0f - transparency);
@@ -715,11 +956,11 @@ accum_pixel water_shading(
 		{
 			color_refraction= lerp(water_color, color_refraction, transparency);
 		}
-	}	
-	
-	// compute foam	
+	}
+
+	// compute foam
 	float4 foam_color= 0.0f;
-	float foam_factor= 0.0f;	
+	float foam_factor= 0.0f;
 	{
 		// calculate factor
 		float foam_factor_auto= 0.0f;
@@ -729,8 +970,11 @@ accum_pixel water_shading(
 			if (INTERPOLATORS.base_tex.z < 0)
 				wave_choppiness_ratio= 0;
 
-			foam_factor_auto= saturate(wave_choppiness_ratio - foam_cut)/saturate(1.0f - foam_cut);
-			foam_factor_auto= pow(foam_factor_auto, max(foam_pow, 1.0f));
+			if (foam_cut < 1.0)
+			{
+				foam_factor_auto= saturate(wave_choppiness_ratio - foam_cut)/saturate(1.0f - foam_cut);
+				foam_factor_auto= pow(foam_factor_auto, max(foam_pow, 1.0f));
+			}
 		}
 
 		if (TEST_CATEGORY_OPTION(foam, paint) || TEST_CATEGORY_OPTION(foam, both))
@@ -764,21 +1008,21 @@ accum_pixel water_shading(
 			if ( foam_factor > 0.002f )
 			{
 				// blend textures
-				float4 foam= tex2D(foam_texture, transform_texcoord(INTERPOLATORS.texcoord.xy, foam_texture_xform));
-				float4 foam_detail= tex2D(foam_texture_detail, transform_texcoord(INTERPOLATORS.texcoord.xy, foam_texture_detail_xform));
+				float4 foam= sample2D(foam_texture, transform_texcoord(INTERPOLATORS.texcoord.xy, foam_texture_xform));
+				float4 foam_detail= sample2D(foam_texture_detail, transform_texcoord(INTERPOLATORS.texcoord.xy, foam_texture_detail_xform));
 				foam_color.rgb= foam.rgb * foam_detail.rgb;
-				foam_color.a= foam.a * foam_detail.a;		
+				foam_color.a= foam.a * foam_detail.a;
 				foam_factor= foam_color.w * foam_factor;
 			}
 		}
 	}
 
 	// compute diffuse by n dot l, really a hack!				// yeah yeah, this is basically just saying water_diffuse * normal.z
-	float3 water_kd=		water_diffuse; 
+	float3 water_kd=		water_diffuse;
 	float3 sun_dir_ws=		float3(0.0, 0.0, 1.0);				//	sun direction up??
 	//sun_dir_ws=			normalize(sun_dir_ws);
 	float n_dot_l=			saturate(dot(sun_dir_ws, normal));	// == normal.z
-	float3 color_diffuse=	water_kd * n_dot_l;					
+	float3 color_diffuse=	water_kd * n_dot_l;
 
 	// compute reflection
 	float3 color_reflection= 0;		//float3(0.1, 0.1, 0.1) * reflection_coefficient;
@@ -791,29 +1035,33 @@ accum_pixel water_shading(
 		// calculate reflection direction
 //		float3x3 tangent_frame_matrix= { INTERPOLATORS.tangent.xyz, INTERPOLATORS.binormal.xyz, INTERPOLATORS.normal.xyz };
 
-//		float3 normal_reflect= mul(normalize(float3(slope_shading * normal_variation_tweak, 1.0f)), tangent_frame_matrix);	
-//		normal_reflect= normalize(normal_reflect);	
-	
+//		float3 normal_reflect= mul(normalize(float3(slope_shading * normal_variation_tweak, 1.0f)), tangent_frame_matrix);
+//		normal_reflect= normalize(normal_reflect);
+
 //		float3 normal_reflect= normal;
 //		float3 normal_reflect= lerp(normal, INTERPOLATORS.normal.xyz, normal_variation_tweak);		// NOTE: uses inverted normal variation tweak
 //		normal_reflect.xy=	slope_shading * normal_variation_tweak;
 //		normal_reflect.z=	saturate(dot(normal_reflect.xy, normal_reflect.xy));
 //		normal_reflect.z=	sqrt(1 - normal_reflect.z);
 		float3 normal_reflect= lerp(normal, float3(0.0f, 0.0f, 1.0f), 1.0f - normal_variation_tweak);	// NOTE: uses inverted normal variation tweak -- if we invert ourselves we can save this op
-		
+
 		float3 reflect_dir= reflect(-INTERPOLATORS.incident_ws.xyz, normal_reflect);
 		reflect_dir.y*= -1.0;
 
 		// sample environment map
 		float4 environment_sample;
 		if (TEST_CATEGORY_OPTION(reflection, static))
-		{         
-			environment_sample= texCUBE(environment_map, reflect_dir);
+		{
+			environment_sample= sampleCUBE(environment_map, reflect_dir);
 			environment_sample.rgb *= 256;		// static cubemap doesn't have exponential bias
 		}
 		else if (TEST_CATEGORY_OPTION(reflection, dynamic))
 		{
-			float4 reflection_0= texCUBE(dynamic_environment_map_0, reflect_dir);
+			float4 reflection_0= sampleCUBE(dynamic_environment_map_0, reflect_dir);
+#ifndef xenon
+			// environment maps on xenon have an exponent adjustment of +2
+			reflection_0 *= 4;
+#endif
 //			float4 reflection_1= texCUBE(dynamic_environment_map_1, reflect_dir);
 			environment_sample= reflection_0;//* dynamic_environment_blend.w;				//	reflection_1 * (1.0f-dynamic_environment_blend.w);
 			environment_sample.rgb *= environment_sample.rgb * 4;
@@ -830,14 +1078,14 @@ accum_pixel water_shading(
 		float sun_scale= dot(sun_light_rate, sun_light_rate);
 
 		const float shadowed_alpha= parts.x*sun_scale + parts.y;
-		color_reflection= 
-			environment_sample.rgb * 
-			shadowed_alpha * 
-			reflection_coefficient;       
-	}	
+		color_reflection=
+			environment_sample.rgb *
+			shadowed_alpha *
+			reflection_coefficient;
+	}
 
 	// only apply lightmap_intensity on diffuse and reflection, watercolor of refrection has already considered
-	color_diffuse*= lightmap_intensity;	
+	color_diffuse*= lightmap_intensity;
 	foam_color.rgb*= lightmap_intensity;
 
 	// add dynamic lighting
@@ -846,7 +1094,7 @@ accum_pixel water_shading(
 	{
 		float3 simple_light_diffuse_light; //= 0.0f;
 		float3 simple_light_specular_light; //= 0.0f;
-		
+
 		calc_simple_lights_analytical(
 			INTERPOLATORS.position_ws,
 			normal,
@@ -859,27 +1107,27 @@ accum_pixel water_shading(
 		color_reflection	+= simple_light_specular_light;
 	}
 
-	// computer fresnel and output color	
+	// computer fresnel and output color
 //	float3 fresnel_normal= normal * 2 * (0.5f - k_is_camera_underwater);		// -1 for underwater
 	float3 fresnel_normal= k_is_camera_underwater ? -normal : normal;
-	
+
 	float fresnel= compute_fresnel(INTERPOLATORS.incident_ws.xyz, fresnel_normal, fresnel_coefficient, fresnel_dark_spot);
 	//fresnel= saturate(fresnel*ripple_slope_length);		// apply interaction disturbance
-	
-	
-	float4 output_color;	
+
+
+	float4 output_color;
 
 	if (alpha_blend_output)
 	{
 		output_color=	color_refraction_blend;
-		
+
 		// reflection blends on top of refraction, with alpha == fresnel factor
 		output_color.rgb=	output_color.rgb * (1.0f - fresnel) + color_reflection * fresnel;
 		output_color.a *=	(1.0f - fresnel);
-	
+
 		// diffuse is a glow layer
 		output_color.rgb += color_diffuse;
-	
+
 		if (!TEST_CATEGORY_OPTION(bankalpha, none))
 		{
 			// bank alpha blends towards background
@@ -898,11 +1146,11 @@ accum_pixel water_shading(
 		// fog -- can we skip it for alpha-blend?
 	}
 	else
-	{		
+	{
 		output_color.rgb= lerp(color_refraction, color_reflection,  fresnel);
-	
+
 		// add diffuse
-		output_color.rgb= output_color.rgb + color_diffuse; 
+		output_color.rgb= output_color.rgb + color_diffuse;
 
 		// apply bank alpha
 		if ( !TEST_CATEGORY_OPTION(bankalpha, none) )
@@ -915,7 +1163,7 @@ accum_pixel water_shading(
 		{
 			output_color.rgb= lerp(output_color.rgb, foam_color.rgb, foam_factor);
 		}
-	
+
 		// apply under water fog
 		[branch]
 		if (k_is_camera_underwater)
@@ -930,11 +1178,11 @@ accum_pixel water_shading(
 
 	//output_color= lightmap_intensity;
 	//output_color= abs(INTERPOLATORS.base_tex);
-	//output_color= abs(INTERPOLATORS.texcoord * 0.25);	
+	//output_color= abs(INTERPOLATORS.texcoord * 0.25);
 	//output_color= float3(slope_shading, 0.5f);
 	//output_color= abs(INTERPOLATORS.normal);
 	//output_color= INTERPOLATORS.position_ws.w;
-		
+
 	return convert_to_render_target(output_color, false, true);
 }
 
@@ -949,7 +1197,6 @@ s_water_interpolators water_dense_per_pixel_vs( s_vertex_type_water_shading IN )
 	s_water_render_vertex vertex= get_tessellated_vertex( IN );
 	return transform_vertex( vertex, false );
 }
-
 
 s_water_interpolators water_flat_per_pixel_vs( s_vertex_type_water_shading IN )
 {
@@ -1013,11 +1260,11 @@ accum_pixel water_flat_blend_per_vertex_ps(s_water_interpolators INTERPOLATORS)
 }
 
 accum_pixel lightmap_debug_mode_ps(s_water_interpolators IN)
-{   	
+{
 	float4 out_color;
-	
+
 	// setup tangent frame
-	
+
 	float3 ambient_only= 0.0f;
 	float3 linear_only= 0.0f;
 	float3 quadratic= 0.0f;
@@ -1032,8 +1279,8 @@ accum_pixel lightmap_debug_mode_ps(s_water_interpolators IN)
 		ambient_only,
 		linear_only,
 		quadratic);
-		
-	return convert_to_render_target(out_color, true, false);	
+
+	return convert_to_render_target(out_color, true, false);
 }
 
 #endif //PIXEL_SHADER

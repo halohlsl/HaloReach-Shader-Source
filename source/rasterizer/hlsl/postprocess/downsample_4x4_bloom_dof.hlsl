@@ -1,12 +1,13 @@
 //#line 2 "source\rasterizer\hlsl\downsample_4x4_bloom_DOF.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-sampler2D dark_source_sampler : register(s1);
+LOCAL_SAMPLER_2D(source_sampler, 0);
+LOCAL_SAMPLER_2D(dark_source_sampler, 1);
 
 
 accum_pixel default_ps(screen_output IN)
@@ -30,7 +31,7 @@ accum_pixel default_ps(screen_output IN)
 	accum_pixel result;
 	result.color.rgb= color * (overwhite / maximum);
 	result.color.a= 1.0f;
-#ifndef LDR_ONLY	
+#ifndef LDR_ONLY
 	result.dark_color.rgb= color;
 	result.dark_color.a= 1.0f;
 #endif

@@ -11,7 +11,7 @@
 
 struct screen_output
 {
-    float4 position	:POSITION;
+    float4 position	:SV_Position;
 };
 
 screen_output default_vs(vertex_type IN)

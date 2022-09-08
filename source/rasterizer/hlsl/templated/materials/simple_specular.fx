@@ -59,26 +59,26 @@ void sh_glossy_sct_3(
 	float3 rotate_z= normalize(view_normal);
 	float3 rotate_x= normalize(view_dir - dot(view_dir, rotate_z) * rotate_z);
 	float3 rotate_y= normalize(cross(rotate_z, rotate_x));
-	
+
 	//local view
 	float2 view_lookup;
 	float roughness= max(roughness * roughness, 0.15f);
-	
+
     view_lookup= float2( dot(view_dir,rotate_x)+c_view_z_shift, roughness + c_roughness_shift);
-   
+
 	float4 cc_value;
 	float4 dd_value;
-	
+
     // bases: 0,2,3,6
     float4 c_value;
     float4 d_value;
-    
-    c_value= tex2D( g_sampler_cc0236, view_lookup ).SWIZZLE;
-    d_value= tex2D( g_sampler_dd0236, view_lookup ).SWIZZLE;
-    
+
+    c_value= sample2D( g_sampler_cc0236, view_lookup ).SWIZZLE;
+    d_value= sample2D( g_sampler_dd0236, view_lookup ).SWIZZLE;
+
     float4 quadratic_a, quadratic_b, sh_local;
-    
-    //0,2,3,6 
+
+    //0,2,3,6
 //	quadratic_a.xyz = (rotate_x.yyx * rotate_x.xzz - 2.0 * rotate_z.yyx * rotate_z.xzz + rotate_y.yyx * rotate_y.xzz)/SQRT3;
 //	quadratic_b= float4(0.5f * rotate_x.x * rotate_x.x +
 //						rotate_z.y * rotate_z.y +
@@ -91,25 +91,25 @@ void sh_glossy_sct_3(
 //						rotate_x.z * rotate_x.z / 2.0f -
 //						rotate_z.z * rotate_z.z +
 //						rotate_y.z * rotate_y.z / 2.0f,
-						
+
 //						0.0f)/SQRT3;
-					
+
 	quadratic_a.xyz= rotate_z.yzx * rotate_z.xyz * (-SQRT3);
 	quadratic_b= float4(rotate_z.xyz * rotate_z.xyz, 1.0f/3.0f) * 0.5f * (-SQRT3);
-	
+
     sh_local.xyz= sh_rotate_023(
 		0,
 		rotate_x,
 		rotate_z,
 		sh_0,
 		sh_312);
-		
+
 	sh_local.w= dot(quadratic_a.xyz, sh_457[0].xyz) + dot(quadratic_b.xyzw, sh_8866[0].xyzw);
-		
+
 	//c0236 dot L0236
     diffuse_part.r = dot( float3(A0_88, A2_10, A6_49), sh_local.xyw );
     sh_local*= float4(1.0f, r_dot_l, r_dot_l, r_dot_l);
-    specular_part.r= dot( c_value, sh_local ); 
+    specular_part.r= dot( c_value, sh_local );
 	schlick_part.r= dot( d_value, sh_local );
 
     sh_local.xyz= sh_rotate_023(
@@ -118,9 +118,9 @@ void sh_glossy_sct_3(
 		rotate_z,
 		sh_0,
 		sh_312);
-	
-	sh_local.w= dot(quadratic_a.xyz, sh_457[1].xyz) + dot(quadratic_b.xyzw, sh_8866[1].xyzw);	
-				
+
+	sh_local.w= dot(quadratic_a.xyz, sh_457[1].xyz) + dot(quadratic_b.xyzw, sh_8866[1].xyzw);
+
     diffuse_part.g = dot( float3(A0_88, A2_10, A6_49), sh_local.xyw );
     sh_local*= float4(1.0f, r_dot_l, r_dot_l, r_dot_l);
     specular_part.g= dot( c_value, sh_local );
@@ -132,9 +132,9 @@ void sh_glossy_sct_3(
 		rotate_z,
 		sh_0,
 		sh_312);
-		
-	sh_local.w= dot(quadratic_a.xyz, sh_457[2].xyz) + dot(quadratic_b.xyzw, sh_8866[2].xyzw);	
-		
+
+	sh_local.w= dot(quadratic_a.xyz, sh_457[2].xyz) + dot(quadratic_b.xyzw, sh_8866[2].xyzw);
+
     diffuse_part.b = dot( float3(A0_88, A2_10, A6_49), sh_local.xyw );
     sh_local*= float4(1.0f, r_dot_l, r_dot_l, r_dot_l);
     specular_part.b= dot( c_value, sh_local );
@@ -147,34 +147,34 @@ void sh_glossy_sct_3(
 	sh_local.rgb= float3(dot(quadratic_a.xyz, sh_457[0].xyz) + dot(quadratic_b.xyz, sh_8866[0].xyz),
 						 dot(quadratic_a.xyz, sh_457[1].xyz) + dot(quadratic_b.xyz, sh_8866[1].xyz),
 						 dot(quadratic_a.xyz, sh_457[2].xyz) + dot(quadratic_b.xyz, sh_8866[2].xyz));
-    
-    
+
+
     sh_local*= r_dot_l;
 
     //c7 * L7
     specular_part.rgb+= c_value.x*sh_local.rgb;
     //d7 * L7
     schlick_part.rgb+= c_value.z*sh_local.rgb;
-    
+
    	//basis - 8
 	quadratic_a.xyz = rotate_x.xyz * rotate_x.yzx - rotate_y.yzx * rotate_y.xyz;
 	quadratic_b.xyz = 0.5f*(rotate_x.xyz * rotate_x.xyz - rotate_y.xyz * rotate_y.xyz);
-	
+
 	sh_local.rgb= float3(-dot(quadratic_a.xyz, sh_457[0].xyz) - dot(quadratic_b.xyz, sh_8866[0].xyz),
 		-dot(quadratic_a.xyz, sh_457[1].xyz) - dot(quadratic_b.xyz, sh_8866[1].xyz),
 		-dot(quadratic_a.xyz, sh_457[2].xyz) - dot(quadratic_b.xyz, sh_8866[2].xyz));
-		
+
     sh_local*= r_dot_l;
-    
+
     //c8 * L8
     specular_part.rgb+= c_value.y*sh_local.rgb;
     //d8 * L8
     schlick_part.rgb+= c_value.w*sh_local.rgb;
-    
-    
+
+
     schlick_part= schlick_part * 0.01f;
     diffuse_part= diffuse_part/3.1415926f;
-                
+
 }
 
 #ifdef SHADER_30
@@ -219,7 +219,7 @@ void calc_material_model_cook_torrance_ps(
 	specular_color= 0.0f;
 
 	envmap_specular_reflectance_and_roughness.xyz=	environment_map_specular_contribution * specular_mask * specular_coefficient;
-	envmap_specular_reflectance_and_roughness.w=	roughness;			// TODO: replace with whatever you use for roughness	
+	envmap_specular_reflectance_and_roughness.w=	roughness;			// TODO: replace with whatever you use for roughness
 
 	envmap_area_specular_only= 1.0f;
 }

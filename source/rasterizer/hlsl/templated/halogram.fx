@@ -23,6 +23,7 @@
 #define NO_WETNESS_EFFECT
 
 
+#include "hlsl_constant_globals.fx"
 #include "templated\templated_globals.fx"
 
 

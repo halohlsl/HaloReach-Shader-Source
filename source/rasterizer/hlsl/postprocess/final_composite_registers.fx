@@ -1,3 +1,4 @@
+#if DX_VERSION == 9
 
 PIXEL_FLOAT(float4,		tone_curve_constants,		k_ps_tone_curve_constants,		3,		1,	final_composite, command_buffer_cache_unknown)		// tone curve:		max, linear, quadratic, cubic terms
 PIXEL_FLOAT(float4,		player_window_constants,	k_ps_player_window_constants,	4,		1,	final_composite, command_buffer_cache_unknown)		// weapon zoom:		x, y, (left top corner), z,w (width, height);
@@ -22,9 +23,30 @@ PIXEL_SAMPLER(sampler2D,	blur_grade_sampler,		k_ps_blur_grade_sampler,	5,	1,	fin
 PIXEL_SAMPLER(sampler2D,	prev_sampler,			k_ps_prev_sampler,			6,	1,	final_composite, command_buffer_cache_unknown)				// antialiasing
 PIXEL_SAMPLER(sampler2D,	noise_sampler,			k_ps_noise_sampler,			7,	1,	final_composite, command_buffer_cache_unknown)				// noise
 
+#elif DX_VERSION == 11
 
+CBUFFER_BEGIN(FinalCompositeVS)
+	CBUFFER_CONST(FinalCompositeVS,		float4,		noise_space_xform,			k_vs_noise_space_xform)
+	CBUFFER_CONST(FinalCompositeVS,		float4,		pixel_space_xform,			k_vs_pixel_space_xform)
+CBUFFER_END
 
+CBUFFER_BEGIN(FinalCompositePS)
+	CBUFFER_CONST(FinalCompositePS,		float4,		tone_curve_constants,		k_ps_tone_curve_constants)
+	CBUFFER_CONST(FinalCompositePS,		float4,		player_window_constants,	k_ps_player_window_constants)
+	//CBUFFER_CONST(FinalCompositePS,		float4,		depth_constants,			k_ps_depth_constants)
+	CBUFFER_CONST(FinalCompositePS,		float4,		depth_constants2,			k_ps_depth_constants2)
+	CBUFFER_CONST(FinalCompositePS,		float4x3,	color_matrix,				k_ps_color_matrix)
+	CBUFFER_CONST(FinalCompositePS,		float4,		gamma,						k_ps_gamma)
+	CBUFFER_CONST(FinalCompositePS,		float4,		noise_params,				k_ps_noise_params)
+CBUFFER_END
 
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	surface_sampler,		k_ps_surface_sampler,		0)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	dark_surface_sampler,	k_ps_dark_surface_sampler,	1)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	bloom_sampler,			k_ps_bloom_sampler,			2)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	depth_sampler,			k_ps_depth_sampler,			3)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	blur_sampler,			k_ps_blur_sampler,			4)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	blur_grade_sampler,		k_ps_blur_grade_sampler,	5)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	prev_sampler,			k_ps_prev_sampler,			6)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	noise_sampler,			k_ps_noise_sampler,			7)
 
-
-
+#endif

@@ -1,26 +1,27 @@
 //#line 2 "source\rasterizer\hlsl\chud_overlay_blend.hlsl"
 
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
 
-sampler2D original_sampler : register(s0);
-sampler2D add_sampler : register(s1);
-sampler2D chud_overlay : register(s2);
+LOCAL_SAMPLER_2D(original_sampler, 0);
+LOCAL_SAMPLER_2D(add_sampler, 1);
+LOCAL_SAMPLER_2D(chud_overlay, 2);
 
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
-	float4 original= tex2D(original_sampler, IN.texcoord);
-	float4 add= tex2D(add_sampler, IN.texcoord);
-	float4 chud= tex2D(chud_overlay, IN.texcoord);
+	float4 original= sample2D(original_sampler, IN.texcoord);
+	float4 add= sample2D(add_sampler, IN.texcoord);
+	float4 chud= sample2D(chud_overlay, IN.texcoord);
 
 	float4 color;
 	color.rgb= scale.rgb * original.rgb * chud.a + add.rgb + chud.rgb;
 	color.a= chud.a;
-	
-	return color;	
+
+	return color;
 }

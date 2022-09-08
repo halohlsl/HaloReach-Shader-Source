@@ -4,20 +4,20 @@
 
 
 #ifdef pc
-float4 tex2D_offset_exact(sampler2D s, const float2 texc, const float offsetx, const float offsety)
+float4 tex2D_offset_exact(texture_sampler_2d s, const float2 texc, const float offsetx, const float offsety)
 {
-	return tex2D(s, texc + float2(offsetx, offsety) * pixel_size.xy);
+	return sample2D(s, texc + float2(offsetx, offsety) * pixel_size.xy);
 }
 #else
 #ifdef PIXEL_SIZE
-float4 tex2D_offset_exact(sampler2D s, const float2 texc, const float offsetx, const float offsety)
+float4 tex2D_offset_exact(texture_sampler_2d s, const float2 texc, const float offsetx, const float offsety)
 {
-	return tex2D(s, texc + float2(offsetx, offsety) * pixel_size.xy);
+	return sample2D(s, texc + float2(offsetx, offsety) * pixel_size.xy);
 }
 #endif
 #endif
 
-float4 tex2D_offset(sampler2D s, float2 texc, const float offsetx, const float offsety)
+float4 tex2D_offset(texture_sampler_2d s, float2 texc, const float offsetx, const float offsety)
 {
 	float4 value= 0.0f;
 #ifdef pc
@@ -33,7 +33,7 @@ float4 tex2D_offset(sampler2D s, float2 texc, const float offsetx, const float o
 }
 
 
-float4 tex2D_offset_point(sampler2D s, float2 texc, const float offsetx, const float offsety)
+float4 tex2D_offset_point(texture_sampler_2d s, float2 texc, const float offsetx, const float offsety)
 {
 	float4 value= 0.0f;
 #ifdef pc
@@ -61,7 +61,7 @@ float4 calculate_weights_bicubic(float4 dist)
 
 	// bicubic parameter 'A'
 #define A -0.75f
-	
+
 	float4 weights;
 	weights.yz= (((A + 2.0f) * dist.yz - (A + 3.0f)) * dist.yz * dist.yz + 1.0f);					// 'photoshop' style bicubic
 	weights.xw= (((A * dist.xw - 5.0f * A ) * dist.xw + 8.0f * A ) * dist.xw - 4.0f * A);
@@ -86,7 +86,7 @@ float4 calculate_weights_bspline(float4 dist)
 float4 calculate_weights_bspline_2x(float dist)
 {
 	// these weights only work when you're resizing by a perfect factor of two.  (but it's faster than above)
-	
+
 	// 0, 0.5
 //	return	float4( 0.166666,  0.666666,  0.166666, 0.0) +
 //			float4(-0.291666, -0.375000,  0.625000, 0.041666667) * dist;
@@ -99,7 +99,7 @@ float4 calculate_weights_bspline_2x(float dist)
 
 #ifndef pc
 #define DECLARE_TEX2D_4x4_METHOD(name, calculate_weights_func)																\
-float4 name(sampler2D s, float2 texc)																						\
+float4 name(texture_sampler_2d s, float2 texc)																						\
 {																															\
     float4 subpixel_dist;																									\
     asm {																													\
@@ -136,8 +136,42 @@ float4 name(sampler2D s, float2 texc)																						\
 																															\
 	return color;																											\
 }
+#elif DX_VERSION == 11
+#define DECLARE_TEX2D_4x4_METHOD(name, calculate_weights_func)															\
+float4 name(texture_sampler_2d s, float2 texc)																				\
+{																															\
+    float2 subpixel_dist;																									\
+	uint width,height;																										\
+	s.t.GetDimensions(width, height);																						\
+	subpixel_dist = frac(texc * float2(width, height));																		\
+  	float4 x_dist= float4(1.0f+subpixel_dist.x, subpixel_dist.x, 1.0f-subpixel_dist.x, 2.0f-subpixel_dist.x);				\
+	float4 x_weights= calculate_weights_func(x_dist);																		\
+																															\
+	float4 y_dist= float4(1.0f+subpixel_dist.y, subpixel_dist.y, 1.0f-subpixel_dist.y, 2.0f-subpixel_dist.y);				\
+	float4 y_weights= calculate_weights_func(y_dist);																		\
+																															\
+	float4 color=	0.0f;																									\
+																															\
+	for (int y= 0; y < 4; y++)																								\
+	{																														\
+		int y_offset= y - 2;																								\
+		float4 color0, color1, color2, color3;																				\
+		color0 = s.t.Sample(s.s, texc, int2(-2, y_offset));																	\
+		color1 = s.t.Sample(s.s, texc, int2(-1, y_offset));																	\
+		color2 = s.t.Sample(s.s, texc, int2(0, y_offset));																	\
+		color3 = s.t.Sample(s.s, texc, int2(1, y_offset));																	\
+		float4 vert_color=	x_weights.x * color0 +																				\
+						x_weights.y * color1 +																				\
+						x_weights.z * color2 +																				\
+						x_weights.w * color3;																				\
+		color += vert_color * y_weights.x;																					\
+		y_weights.xyz= y_weights.yzw;																						\
+	}																														\
+																															\
+	return color;																											\
+}
 #else  // pc
-#define DECLARE_TEX2D_4x4_METHOD(name, calculate_weights_func) float4 name(sampler2D s, float2 texc) { return 0.0f; }
+#define DECLARE_TEX2D_4x4_METHOD(name, calculate_weights_func) float4 name(texture_sampler_2d s, float2 texc) { return 0.0f; }
 #endif // pc
 
 DECLARE_TEX2D_4x4_METHOD(tex2D_bspline, calculate_weights_bspline)
@@ -148,14 +182,14 @@ float4 tex2D_bspline_fast_2x(sampler2D s, float2 texc)
 {
 /*
 	float4 subpixel_dist;
-	asm 
+	asm
 	{
 		getWeights2D subpixel_dist, texc, s
 	};
-	
+
 	// force subpixel to be 0.5 or 1
 	subpixel_dist.xy= (floor(subpixel_dist.xy * 2.0f + 0.5f) * 0.5f);
-			
+
 	// calculate offsets	(p0.x, p0.y, p1.x, p1.y) in pixels
 	float4 offsets= float4(-0.083333, -0.083333,  0.883333,  0.883333) +
 					float4(-0.916666, -0.916666, -0.683333, -0.683333) * subpixel_dist.xyxy;
@@ -168,12 +202,12 @@ float4 tex2D_bspline_fast_2x(sampler2D s, float2 texc)
 	offsets *= pixel_size.xyxy;
 
 	float4 color= 0.0f;
-		
+
 	color += tex2D(s, texc + offsets.xy) * weights.x * weights.y;
 	color += tex2D(s, texc + offsets.xw) * weights.x * weights.w;
 	color += tex2D(s, texc + offsets.zy) * weights.z * weights.y;
 	color += tex2D(s, texc + offsets.zw) * weights.z * weights.w;
-		
+
 	return color;
 */
 }

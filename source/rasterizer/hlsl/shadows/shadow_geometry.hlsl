@@ -12,14 +12,14 @@
 
 void default_vs(
 	in vertex_type vertex,
-	out float4 position : POSITION)
+	out float4 position : SV_Position)
 {
     float4 local_to_world_transform[3];
 	if (always_true)
 	{
 		deform(vertex, local_to_world_transform);
 	}
-	
+
 	if (always_true)
 	{
 		position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);

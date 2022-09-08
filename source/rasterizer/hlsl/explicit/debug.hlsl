@@ -17,7 +17,7 @@
 
 struct debug_output
 {
-	float4 HPosition	:POSITION;
+	float4 HPosition	:SV_Position;
     float4 Color		:COLOR0;
 };
 

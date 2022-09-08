@@ -1,13 +1,14 @@
 //#line 2 "source\rasterizer\hlsl\downsize_2x_target.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
+LOCAL_SAMPLER_2D(source_sampler, 0);
 
-float4 default_ps(screen_output IN) : COLOR				// ###ctchou $TODO $PERF convert this to tex2D_offset, and do a gaussian filter greater than 4x4 kernel (cheap cuz we only use it on the smaller size textures)
+float4 default_ps(screen_output IN) : SV_Target				// ###ctchou $TODO $PERF convert this to tex2D_offset, and do a gaussian filter greater than 4x4 kernel (cheap cuz we only use it on the smaller size textures)
 {
 #ifdef pc
 	float3 color= 0.00000001f;			// hack to keep divide by zero from happening on the nVidia cards

@@ -4,7 +4,7 @@
 /* ----------------------------------------------------------
 cook_torrance_core.fx
 6-17-2009 xwan.
-the core implementation of cook torrance material mode, which 
+the core implementation of cook torrance material mode, which
 will be shared between cook-torrance and skin(organism) shaders.
 ---------------------------------------------------------- */
 
@@ -19,14 +19,14 @@ the organism materials has a super-set of parameter list
 of cook-torrance.
 ---------------------------------------------------------- */
 
-float	roughness;					//roughness
-float	albedo_blend;				//how much to blend in the albedo color to fresnel f0
-float	analytical_roughness;		//point light roughness
+PARAM(float, roughness);				//roughness
+PARAM(float, albedo_blend);				//how much to blend in the albedo color to fresnel f0
+PARAM(float, analytical_roughness);		//point light roughness
 
 #if ALBEDO_TYPE(calc_albedo_ps) != ALBEDO_TYPE_calc_albedo_four_change_color_applying_to_specular_ps
 
-float3	fresnel_color;				//reflectance at normal incidence
-float3	specular_tint;
+PARAM(float3, fresnel_color);			//reflectance at normal incidence
+PARAM(float3, specular_tint);
 
 #else
 
@@ -36,7 +36,7 @@ float3	specular_tint;
 #endif
 
 
-float fresnel_curve_steepness;
+PARAM(float, fresnel_curve_steepness);
 
 // alias
 #define normal_specular		specular_tint
@@ -54,7 +54,7 @@ float calc_specular_power_scale(float power_or_roughness)
 
 float3 calc_analytical_specular_multiplier(float specular_mask)
 {
-	return specular_mask * specular_coefficient * analytical_specular_contribution; 
+	return specular_mask * specular_coefficient * analytical_specular_contribution;
 }
 
 float3 calc_diffuse_multiplier()
@@ -63,7 +63,7 @@ float3 calc_diffuse_multiplier()
 }
 
 static void calculate_fresnel(
-	in float3 view_dir,				
+	in float3 view_dir,
 	in float3 normal_dir,
 	in float3 albedo_color,
 	out float power,
@@ -72,10 +72,10 @@ static void calculate_fresnel(
 {
     float n_dot_v = saturate(dot( normal_dir, view_dir ));
     float fresnel_blend= pow(1.0f - n_dot_v, fresnel_curve_steepness);
-    power= analytical_roughness;
+    power= max(0.00001, analytical_roughness);
 
     normal_specular_blend_albedo_color= lerp(normal_specular, albedo_color, albedo_blend);
-    final_specular_color= lerp(normal_specular_blend_albedo_color, glancing_specular, fresnel_blend);   
+    final_specular_color= lerp(normal_specular_blend_albedo_color, glancing_specular, fresnel_blend);
 }
 
 // for point light source only
@@ -96,10 +96,10 @@ float3 calc_material_analytic_specular(
     float3 final_specular_color;
 	float specular_power;
 	calculate_fresnel(
-	    view_dir, 
-	    normal_dir, 
-	    diffuse_albedo_color, 
-	    specular_power, 
+	    view_dir,
+	    normal_dir,
+	    diffuse_albedo_color,
+	    specular_power,
 	    normal_specular_blend_albedo_color,
 	    final_specular_color);
 
@@ -110,13 +110,13 @@ float3 calc_material_analytic_specular(
     // a: roughless
     spatially_varying_material_parameters = float4(specular_coefficient, albedo_blend, environment_map_specular_contribution, specular_power);
     if (use_material_texture)
-    {	
+    {
 	    //over ride shader supplied values with what's from the texture
-	    float	power_modifier=	tex2D(material_texture, transform_texcoord(texcoord, material_texture_xform)).a;
+	    float	power_modifier=	sample2D(material_texture, transform_texcoord(texcoord, material_texture_xform)).a;
 	    spatially_varying_material_parameters.w=	lerp(material_texture_black_roughness, spatially_varying_material_parameters.w, power_modifier);
 		spatially_varying_material_parameters.r	*=	lerp(material_texture_black_specular_multiplier, 1.0f, power_modifier);
     }
-    
+
     float3 f0=normal_specular_blend_albedo_color;
     float3 f1=glancing_specular;
 
@@ -126,15 +126,15 @@ float3 calc_material_analytic_specular(
     float3 H=normalize(L+view_dir);
     float fNDotH=(dot(H,normal_dir));
     float fHDotV=(dot(view_dir,H));
-    
+
 	float D= 0;
     float G;
     float D_area;
-    float3 F;    
-	
+    float3 F;
+
 	//Beckmann distribution
-    {	    
-	    float m;//Root mean square slope of microfacets 
+    {
+	    float m;//Root mean square slope of microfacets
 	    float sqr_tan_alpha= (1 - fNDotH * fNDotH) / (fNDotH * fNDotH);
 	    m=saturate(spatially_varying_material_parameters.a);
 	    D= exp( -sqr_tan_alpha / SQR(m) )/( SQR(m) * SQR( SQR(fNDotH)) + 0.00001f);
@@ -157,9 +157,9 @@ float3 calc_material_analytic_specular(
 		G=saturate(min(G1,G2));
 	}
 
-	analytic_specular_radiance= D * G * F /(fVDotN)/3.141592658*light_irradiance;	
-	return final_specular_color;	
-}		
+	analytic_specular_radiance= (fVDotN != 0.0f) ? max(0, D * G * F /(fVDotN)/3.141592658*light_irradiance) : 0;
+	return final_specular_color;
+}
 
 
 void calc_material_full(
@@ -179,17 +179,17 @@ void calc_material_full(
 	inout float3 envmap_area_specular_only,
 	out float4 specular_radiance,
 	inout float3 diffuse_radiance)
-{  
+{
 
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	if (p_shader_pc_specular_enabled!=0.f)
 #endif // pc
-	{		
+	{
 		float3 normal_specular_blend_albedo_color;		// specular_albedo (no fresnel)
 		float4 per_pixel_parameters;
 		float3 specular_analytical;			// specular radiance
 		float4 spatially_varying_material_parameters;
-		
+
 		float3 final_specular_tint_color= calc_material_analytic_specular(
 			view_dir,
 			view_normal,
@@ -200,12 +200,12 @@ void calc_material_full(
 			texcoord,
 			prt_ravi_diff.w,
 			tangent_frame,
-			spatially_varying_material_parameters,			
+			spatially_varying_material_parameters,
 			normal_specular_blend_albedo_color,
 			specular_analytical);
 
 		//specular_analytical*=sh_lighting_coefficients[0].a;
-		
+
 		float3 simple_light_diffuse_light; //= 0.0f;
 		float3 simple_light_specular_light; //= 0.0f;
 
@@ -236,14 +236,14 @@ void calc_material_full(
 		//calculate the area sh
 		float3 specular_part=0.0f;
 		float3 schlick_part=0.0f;
-		
+
 		{
 			float4 vmf[4];
 			vmf[0]=sh_lighting_coefficients[0];
 			vmf[1]=sh_lighting_coefficients[1];
 			vmf[2]=sh_lighting_coefficients[2];
 			vmf[3]=sh_lighting_coefficients[3];
-	
+
 
 			dual_vmf_diffuse_specular_with_fresnel(
 				view_dir,
@@ -253,31 +253,31 @@ void calc_material_full(
 				roughness,
 				sh_glossy);
 		}
-						
+
 		envmap_specular_reflectance_and_roughness.w= spatially_varying_material_parameters.a;
 		envmap_area_specular_only= envmap_area_specular_only * final_specular_tint_color.rgb + sh_glossy * prt_ravi_diff.z;
-				
+
 		//scaling and masking
-		specular_radiance.xyz= specular_mask * spatially_varying_material_parameters.r * 
+		specular_radiance.xyz= specular_mask * spatially_varying_material_parameters.r *
 			(
-			(simple_light_specular_light + specular_analytical) * 
+			(simple_light_specular_light + specular_analytical) *
 			analytical_specular_contribution +
 			max(sh_glossy, 0.0f) * area_specular_contribution);
-			
+
 		specular_radiance.w= 0.0f;
-			
-		envmap_specular_reflectance_and_roughness.xyz =	spatially_varying_material_parameters.b * 
-			specular_mask * 
+
+		envmap_specular_reflectance_and_roughness.xyz =	spatially_varying_material_parameters.b *
+			specular_mask *
 			spatially_varying_material_parameters.r;		// ###ctchou $TODO this ain't right
-				
+
 		diffuse_radiance= diffuse_radiance * prt_ravi_diff.x;
 		diffuse_radiance= (simple_light_diffuse_light + diffuse_radiance) * diffuse_coefficient;
-		specular_radiance*= prt_ravi_diff.z;		
-		
+		specular_radiance*= prt_ravi_diff.z;
+
 		//diffuse_color= 0.0f;
 		//specular_color= spatially_varying_material_parameters.r;
 	}
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	else
 	{
 		envmap_specular_reflectance_and_roughness= float4(0.f, 0.f, 0.f, 0.f);

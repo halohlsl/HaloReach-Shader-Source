@@ -1,21 +1,22 @@
 //#line 2 "source\rasterizer\hlsl\apply_bloom_curve.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
+LOCAL_SAMPLER_2D(source_sampler, 0);
 
 // scale = bloom_curve_constants
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	float2 sample0= IN.texcoord; //+ 0.5 * source_pixel_size;
 
- 	float4 color= tex2D(source_sampler, sample0);
+ 	float4 color= sample2D(source_sampler, sample0);
  	color.rgb= color * DARK_COLOR_MULTIPLIER;
-	
+
 	// drop out visible values (no bloom on em)
 	float maximum= max(max(color.r, color.g), color.b);
 //	float overwhite= maximum-min(maximum, bloom_curve_constants.x);  // bloom_point

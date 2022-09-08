@@ -2,29 +2,25 @@
 
 #define USE_CUSTOM_POSTPROCESS_CONSTANTS
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
+#include "explicit\screenshot_memexport_registers.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-sampler2D background_sampler : register(s1);			// destination texture
-
-PIXEL_CONSTANT( float4, vpos_to_pixel_xform,		POSTPROCESS_DEFAULT_PIXEL_CONSTANT );
-PIXEL_CONSTANT( float4, pixel_to_source_xform,		POSTPROCESS_EXTRA_PIXEL_CONSTANT_0);
-PIXEL_CONSTANT( float4, export_info,				POSTPROCESS_EXTRA_PIXEL_CONSTANT_1);		// row stride in pixels, maximum pixel index, screenshot gamma
-PIXEL_CONSTANT( float4, export_stream_constant,		POSTPROCESS_EXTRA_PIXEL_CONSTANT_2);
-
+LOCAL_SAMPLER_2D(source_sampler, 0);
+LOCAL_SAMPLER_2D(background_sampler, 1);			// destination texture
 
 // pixel fragment entry points
-float4 default_ps(screen_output IN, in float2 pos : VPOS) : COLOR
+float4 default_ps(screen_output IN, SCREEN_POSITION_INPUT(pos)) : SV_Target
 {
 	float2 pixel_coord= pos.xy * vpos_to_pixel_xform.xy + vpos_to_pixel_xform.zw;
 	int pixel_index= min(pixel_coord.y * export_info.x + pixel_coord.x, export_info.y);
 
 	// sample source
-	float2 source_coord= pixel_coord.xy * pixel_to_source_xform.xy + pixel_to_source_xform.zw;	
-	float4 source= tex2D(source_sampler, source_coord);
+	float2 source_coord= pixel_coord.xy * pixel_to_source_xform.xy + pixel_to_source_xform.zw;
+	float4 source= sample2D(source_sampler, source_coord);
 
 	// screenshot gamma -> linear
 //	source.rgb= pow(source.rgb, export_info.z);
@@ -32,7 +28,7 @@ float4 default_ps(screen_output IN, in float2 pos : VPOS) : COLOR
 	// sample background
 	float4 result= source;
 #ifdef pc
-	source += tex2D(background_sampler, IN.texcoord);
+	source += sample2D(background_sampler, IN.texcoord);
 #else
 
 	// grab exact background pixel

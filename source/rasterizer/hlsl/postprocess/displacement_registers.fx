@@ -2,11 +2,12 @@
 DISPLACEMENT_REGISTERS.FX
 Copyright (c) Microsoft Corporation, 2007. all rights reserved.
 3/21/2007 4:57:42 PM (davcook)
-	
+
 */
 
 // ###ctchou $TODO alot of these are unused - remove them!
 
+#if DX_VERSION == 9
 
 // screen_constants.xy == 1/pixel resolution
 // screen_constants.zw == screenshot_scale
@@ -40,7 +41,7 @@ INT_CONSTANT(num_taps2, 3)
 INT_CONSTANT(num_taps3, 4)
 #endif // pc
 
-// .x= num taps	
+// .x= num taps
 // .y= motion blur time scale adjustment, for really slow or really long frames [unused due to optimization]
 // .z= expected DT between frames [unused due to optimization]
 // .w= blur center falloff
@@ -75,3 +76,31 @@ PIXEL_CONSTANT(float4, crosshair_constants, 209)
 VERTEX_CONSTANT(float4, vs_crosshair_constants, 251)
 
 BOOL_CONSTANT(do_distortion, 2)
+
+#elif DX_VERSION == 11
+
+CBUFFER_BEGIN(DisplacementVS)
+	CBUFFER_CONST(DisplacementVS,				float4,		vs_resolution_constants,		k_vs_displacement_resolution_constants)
+CBUFFER_END
+
+CBUFFER_BEGIN(DisplacementPS)
+	CBUFFER_CONST(DisplacementPS,				float4,		screen_constants,				k_ps_displacement_screen_constants)
+	CBUFFER_CONST(DisplacementPS,				float4,		resolution_constants,			k_ps_displacement_resolution_constants)
+	CBUFFER_CONST(DisplacementPS,				float4,		distort_constants,				k_ps_displacement_distort_constants)
+	CBUFFER_CONST(DisplacementPS,				float4,		window_bounds, 					k_ps_displacement_window_bounds)
+	CBUFFER_CONST(DisplacementPS,				float4x4, 	combined3, 						k_ps_displacement_combined3)
+CBUFFER_END
+
+CBUFFER_BEGIN(DisplacementMotionBlurVS)
+	CBUFFER_CONST(DisplacementMotionBlurVS,		float4, 	vs_crosshair_constants,			k_vs_displacement_motion_blur_crosshair_constants)
+CBUFFER_END
+
+CBUFFER_BEGIN(DisplacementMotionBlurPS)
+	CBUFFER_CONST(DisplacementMotionBlurPS,		int4,		num_taps, 						k_ps_displacement_motion_blur_num_taps)
+	CBUFFER_CONST(DisplacementMotionBlurPS,		float4, 	blur_constants,					k_ps_displacement_motion_blur_blur_constants)
+	CBUFFER_CONST(DisplacementMotionBlurPS,		float4, 	pixel_blur_constants,			k_ps_displacement_motion_blur_pixel_blur_constants)
+	CBUFFER_CONST(DisplacementMotionBlurPS,		float4, 	crosshair_constants,			k_ps_displacement_motion_blur_crosshair_constants)
+	CBUFFER_CONST(DisplacementMotionBlurPS,		bool, 		do_distortion,					k_ps_displacement_motion_blur_do_distortion)
+CBUFFER_END
+
+#endif

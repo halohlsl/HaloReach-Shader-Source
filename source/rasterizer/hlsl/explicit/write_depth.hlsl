@@ -17,7 +17,7 @@
 
 void default_vs(
 	in vertex_type vertex,
-	out float4 position : POSITION,
+	out float4 position : SV_Position,
 	out float4 position_copy : TEXCOORD0)
 {
     float4 local_to_world_transform[3];
@@ -38,19 +38,24 @@ void default_vs(
 	}
 }
 
-float4 default_ps(in float4 position : TEXCOORD0) : COLOR
+#if DX_VERSION == 9
+float4 default_ps(SCREEN_POSITION_INPUT(screen_position), in float4 position : TEXCOORD0) : SV_Target
 {
 	return float4(position.z, position.z, position.z, 1.0f);
 }
-
+#elif DX_VERSION == 11
+void default_ps()
+{
+}
+#endif
 
 void memexport_blank_vs(
-	out float4 position : POSITION)
+	out float4 position : SV_Position)
 {
 	position= 0.0f;
 }
 
-float4 memexport_blank_ps(void) :COLOR0
+float4 memexport_blank_ps(void) :SV_Target0
 {
 	return float4(0,1,2,3);
 }

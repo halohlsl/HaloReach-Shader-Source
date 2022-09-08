@@ -21,21 +21,21 @@
 // our output format
 struct accum_pixel
 {
-	float4 color : COLOR0;			// LDR buffer output -> render target 0
+	float4 color : SV_Target0;		// LDR buffer output -> render target 0
 #ifndef LDR_ONLY	
-	float4 dark_color : COLOR1;		// HDR buffer output -> render target 1
+	float4 dark_color : SV_Target1;		// HDR buffer output -> render target 1
 #endif
 };
 
 // our output format for single pass rendering
 struct accum_pixel_and_normal
 {
-	float4 color : COLOR0;			// LDR buffer output -> render target 0
-	float4 normal: COLOR1;			// Normal -> render target 1
+	float4 color : SV_Target0;			// LDR buffer output -> render target 0
+	float4 normal: SV_Target1;			// Normal -> render target 1
 };
 	
 // convert a color to the render target format
-accum_pixel convert_to_render_target(in float4 color, bool clamp_positive, bool ignore_bloom_override)
+   accum_pixel convert_to_render_target(in float4 color, bool clamp_positive, bool ignore_bloom_override)
 {
 	if (clamp_positive)
 	{

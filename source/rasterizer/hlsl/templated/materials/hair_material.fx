@@ -11,42 +11,42 @@ Mon, Feb 4, 2008 2:01pm (xwan)
 //****************************************************************************
 
 // diffuse
-float3 diffuse_tint;
+PARAM(float3, diffuse_tint);
 
 // specular from lighting
-float area_specular_coefficient;
-float analytical_specular_coefficient;
-float3 specular_tint;
-float specular_power;
-sampler specular_map;
-sampler specular_shift_map;
-sampler specular_noise_map;
+PARAM(float, area_specular_coefficient);
+PARAM(float, analytical_specular_coefficient);
+PARAM(float3, specular_tint);
+PARAM(float, specular_power);
+PARAM_SAMPLER_2D(specular_map);
+PARAM_SAMPLER_2D(specular_shift_map);
+PARAM_SAMPLER_2D(specular_noise_map);
 
 // specular from environment map
-float environment_map_coefficient;
-float3 environment_map_tint;
+PARAM(float, environment_map_coefficient);
+PARAM(float3, environment_map_tint);
 
 // final tint
-float3 final_tint;
+PARAM(float3, final_tint);
 
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	#define FORCE_BRANCH
 #else
 	#define FORCE_BRANCH	[branch]
 #endif
 
-void calc_material_analytic_specular_hair(	
+void calc_material_analytic_specular_hair(
 	in float3 tangent_dir,									// tangent direction in world space
 	in float3 reflect_half,								// view_dir reflected about surface normal, in world space
 	in float3 light_dir,									// fragment to light, in world space
-	in float3 light_irradiance,								// light intensity at fragment; i.e. light_color	
+	in float3 light_irradiance,								// light intensity at fragment; i.e. light_color
 	float power_or_roughness,
-	out float3 analytic_specular_radiance)	
-{   	
-	const float t_dot_h = dot(tangent_dir, reflect_half); 	
+	out float3 analytic_specular_radiance)
+{
+	const float t_dot_h = dot(tangent_dir, reflect_half);
 	//if ( t_dot_h > 0 )
 	{
-		const float sin_t_h= sqrt( 1.0f - t_dot_h*t_dot_h);        
+		const float sin_t_h= sqrt( 1.0f - t_dot_h*t_dot_h);
 		analytic_specular_radiance= pow(sin_t_h, power_or_roughness) * light_irradiance;
 	}
 	//else
@@ -58,7 +58,7 @@ void calc_material_analytic_specular_hair(
 
 void calculate_area_specular_phong_order_2(
 	in float3 reflection_dir,
-	in float4 sh_lighting_coefficients[4],		
+	in float4 sh_lighting_coefficients[4],
 	out float3 s0)
 {
 															//float power_invert= 0.5f;
@@ -68,24 +68,24 @@ void calculate_area_specular_phong_order_2(
 	float p_3= -0.2009446f;									// 0.429043f * -1
 
 	float3 x0, x1, x2, x3;
-	
+
 	//constant
 	x0= sh_lighting_coefficients[0].r * p_0;
-	
+
 	// linear
 	x1.r=  dot(reflection_dir, sh_lighting_coefficients[1]);
 	x1.g=  dot(reflection_dir, sh_lighting_coefficients[2]);
 	x1.b=  dot(reflection_dir, sh_lighting_coefficients[3]);
 	x1 *= p_1;
-	
-	//s0= x0 + x1;		
+
+	//s0= x0 + x1;
 	s0= x1;
 }
 
 //*****************************************************************************
 // the material model
 //*****************************************************************************
-	
+
 void calc_material_hair_ps(
 	in float3 view_dir,
 	in float3 fragment_to_camera_world,
@@ -103,13 +103,13 @@ void calc_material_hair_ps(
 	inout float3 envmap_area_specular_only,
 	out float4 output_color,
 	inout float3 diffuse_radiance)
-{	
+{
 	const float3 surface_tangent= tangent_frame[1];
 	const float3 surface_normal= tangent_frame[2];
-	
-	float specular_shift= tex2D(specular_shift_map, texcoord).x;
+
+	float specular_shift= sample2D(specular_shift_map, texcoord).x;
 	specular_shift-= 0.5f;
-	float specular_noise= tex2D(specular_noise_map, texcoord).x;
+	float specular_noise= sample2D(specular_noise_map, texcoord).x;
 
 	float3 tangent_0= surface_tangent + surface_normal*specular_shift;
 	float3 tangent_1= surface_tangent - surface_normal*specular_shift*specular_noise;
@@ -117,34 +117,34 @@ void calc_material_hair_ps(
 	normalize(tangent_1);
 
 
-	float3 bi_view_dir= cross(view_dir, surface_tangent);		
+	float3 bi_view_dir= cross(view_dir, surface_tangent);
 
-	
+
 	float3 area_specular_normal_0= cross(tangent_0, bi_view_dir);
-	normalize(area_specular_normal_0);		
-	float3 view_reflect_by_hair_0= reflect(-view_dir, area_specular_normal_0);	
+	normalize(area_specular_normal_0);
+	float3 view_reflect_by_hair_0= reflect(-view_dir, area_specular_normal_0);
 
 	float3 area_specular_normal_1= cross(tangent_1, bi_view_dir);
-	normalize(area_specular_normal_1);		
-	float3 view_reflect_by_hair_1= reflect(-view_dir, area_specular_normal_1);	
-	
+	normalize(area_specular_normal_1);
+	float3 view_reflect_by_hair_1= reflect(-view_dir, area_specular_normal_1);
+
 
 	// sample specular map
-	float4 specular_map_color= tex2D(specular_map, texcoord);
-	float power_or_roughness= specular_map_color.a * specular_power;	
+	float4 specular_map_color= sample2D(specular_map, texcoord);
+	float power_or_roughness= specular_map_color.a * specular_power;
 
-	// calculate simple dynamic lights	
+	// calculate simple dynamic lights
 	float3 fragment_position_world= Camera_Position_PS - fragment_to_camera_world;
 	float3 simple_lights_bump_diffuse= 0.0f;
 	float3 simple_lights_bump_specular_0= 0.0f;
 	float3 simple_lights_bump_specular_1= 0.0f;
-	
+
 	if (!no_dynamic_lights)
-	{			
+	{
 		calc_simple_lights_analytical(
 			fragment_position_world,
 			area_specular_normal_0,
-			view_reflect_by_hair_0,	
+			view_reflect_by_hair_0,
 			sqrt(power_or_roughness), // dim the power as a hack
 			simple_lights_bump_diffuse,
 			simple_lights_bump_specular_0);
@@ -152,7 +152,7 @@ void calc_material_hair_ps(
 		calc_simple_lights_analytical(
 			fragment_position_world,
 			area_specular_normal_1,
-			view_reflect_by_hair_1,	
+			view_reflect_by_hair_1,
 			sqrt(power_or_roughness), // dim the power as a hack
 			simple_lights_bump_diffuse,
 			simple_lights_bump_specular_1);
@@ -161,8 +161,8 @@ void calc_material_hair_ps(
 	// calculate diffuse color
 	float3 diffuse_color;
 	{
-		diffuse_color= 
-			(simple_lights_bump_diffuse + diffuse_radiance) * 
+		diffuse_color=
+			(simple_lights_bump_diffuse + diffuse_radiance) *
 			diffuse_coefficient * diffuse_tint; // * albedo.xyz * albedo.w
 	}
 
@@ -173,24 +173,24 @@ void calc_material_hair_ps(
 		reflect_half= normalize(reflect_half);
 
 		float3 specular_0, specular_1;
-		calc_material_analytic_specular_hair(		
+		calc_material_analytic_specular_hair(
 			tangent_0,
 			reflect_half,
 			analytical_light_dir,
-			analytical_light_intensity,		
+			analytical_light_intensity,
 			power_or_roughness,
 			specular_0);
 
-		calc_material_analytic_specular_hair(		
+		calc_material_analytic_specular_hair(
 			tangent_1,
 			reflect_half,
 			analytical_light_dir,
-			analytical_light_intensity,		
+			analytical_light_intensity,
 			power_or_roughness*specular_noise,
 			specular_1);
 
-		analytic_specular_radiance= 
-			specular_0 + simple_lights_bump_specular_0 + 
+		analytic_specular_radiance=
+			specular_0 + simple_lights_bump_specular_0 +
 			(specular_1 + simple_lights_bump_specular_1) *specular_noise;
 	}
 
@@ -199,7 +199,7 @@ void calc_material_hair_ps(
 	}
 
 	float3 specular_color=
-		analytic_specular_radiance*analytical_specular_coefficient + 
+		analytic_specular_radiance*analytical_specular_coefficient +
 		area_specular_radiance*area_specular_coefficient;
 
 	specular_color*=
@@ -212,14 +212,14 @@ void calc_material_hair_ps(
 		envmap_specular_reflectance_and_roughness.xyz= environment_map_tint * environment_map_coefficient * specular_map_color.rgb;
 		envmap_specular_reflectance_and_roughness.w= 1.0f;
 	}
-	
+
 	//do color output
 	output_color.xyz=
 		specular_color;
-	output_color.w= 1.0f; 	
-	
+	output_color.w= 1.0f;
+
 	//do albedo
-	diffuse_radiance= 		
+	diffuse_radiance=
 		diffuse_color;
 
 	// final tint
@@ -261,12 +261,12 @@ void calc_material_analytic_specular_hair_ps(
 	float3 surface_tangent= tangent_frame[1];
 
 	// sample specular map
-	float4 specular_map_color= tex2D(specular_map, texcoord);
-	float power_or_roughness= specular_map_color.a * specular_power;	
+	float4 specular_map_color= sample2D(specular_map, texcoord);
+	float power_or_roughness= specular_map_color.a * specular_power;
 
 	// calculate diffuse color
-	float3 simple_lights_bump_diffuse= saturate(dot(light_dir, bump_normal)) * light_irradiance;	
-	float3 diffuse_color= 
+	float3 simple_lights_bump_diffuse= saturate(dot(light_dir, bump_normal)) * light_irradiance;
+	float3 diffuse_color=
 			simple_lights_bump_diffuse * diffuse_coefficient * diffuse_tint;
 
 	// calculate specular from analytic and area
@@ -276,10 +276,10 @@ void calc_material_analytic_specular_hair_ps(
 		float3 reflect_half= view_dir + light_dir;
 		reflect_half= normalize(reflect_half);
 
-		float specular_shift= tex2D(specular_shift_map, texcoord).x;
+		float specular_shift= sample2D(specular_shift_map, texcoord).x;
 		specular_shift-= 0.5f;
 
-		float specular_noise= tex2D(specular_noise_map, texcoord).x;
+		float specular_noise= sample2D(specular_noise_map, texcoord).x;
 
 		float3 tangent_0= surface_tangent + surface_normal*specular_shift;
 		float3 tangent_1= surface_tangent - surface_normal*specular_shift*specular_noise;
@@ -291,7 +291,7 @@ void calc_material_analytic_specular_hair_ps(
 			tangent_0,
 			reflect_half,
 			light_dir,
-			light_irradiance,		
+			light_irradiance,
 			power_or_roughness,
 			specular_0);
 
@@ -299,7 +299,7 @@ void calc_material_analytic_specular_hair_ps(
 			tangent_1,
 			reflect_half,
 			light_dir,
-			light_irradiance,		
+			light_irradiance,
 			power_or_roughness*specular_noise,
 			specular_1);
 
@@ -310,8 +310,8 @@ void calc_material_analytic_specular_hair_ps(
 			specular_tint * specular_map_color.rgb;
 
 	//do color output
-	analytic_specular_radiance= 			
-		specular_color+ 				
+	analytic_specular_radiance=
+		specular_color+
 		diffuse_color * diffuse_albedo_color;
 
 	analytic_specular_radiance*= final_tint;

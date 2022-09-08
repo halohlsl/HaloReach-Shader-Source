@@ -4,16 +4,13 @@
 #include "hlsl_constant_globals.fx"
 #include "templated\deform.fx"
 #include "shared\utilities.fx"
+#include "explicit\debug_portals_registers.fx"
 
 //@generate world
 
-float4 color : register(c2);
-
-sampler	vector_map;
-
 void default_vs(
 	in vertex_type vertex,
-	out float4 position : POSITION,
+	out float4 position : SV_Position,
 	out float3 position_copy : TEXCOORD0)
 {
     float4 local_to_world_transform[3];
@@ -24,7 +21,8 @@ void default_vs(
 
 // pixel fragment entry points
 float4 default_ps(
-	in float3 position : TEXCOORD0) : COLOR
+	in float4 screen_position : SV_Position,
+	in float3 position : TEXCOORD0) : SV_Target
 {
 //	float3 grid=	(frac(position.rgb) < 0.1f) + (frac(position.rgb * 5.0f) < 0.1f);
 //	float alpha=	1.0f - saturate(dot(grid, float3(1.0f, 1.0f, 1.0f)));
@@ -33,15 +31,20 @@ float4 default_ps(
 //	float3 distance3=		min(abs(frac(position.rgb) - 0.5f), 0.2f * abs(frac(position.rgb * 5.0f) - 0.5f));
 
 	float4 gradients;
-#ifdef pc
+#if defined(pc) && (DX_VERSION != 11)
 	gradients.xyzw=		1.0f;
 #else // !pc
 	float4 gradients2;
+#ifdef xenon
 	asm {
 		getGradients gradients,		position.xy, vector_map
 		getGradients gradients2,	position.zy, vector_map
 	};
-	
+#elif DX_VERSION == 11
+	gradients= GetGradients(position.xy);
+	gradients2= GetGradients(position.zy);
+#endif
+
 	gradients.x=	sqrt(dot(gradients.xy, gradients.xy));
 	gradients.y=	sqrt(dot(gradients.zw, gradients.zw));
 	gradients.z=	sqrt(dot(gradients2.xy, gradients2.xy));
@@ -65,7 +68,7 @@ float4 default_ps(
 //	float vector_alpha= saturate(distance * min(scale, 1000.000000) + 0.5f);		// vector_sharpness = 1000
 
 	float3 vector_alpha= saturate(distance3 * scale + 0.5f);
-	
+
 //	float alpha=	vector_alpha.x * vector_alpha.y * vector_alpha.z;
 	float alpha=	dot(vector_alpha, float3(0.33f, 0.33f, 0.33f));
 

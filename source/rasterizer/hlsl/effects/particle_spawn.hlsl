@@ -6,44 +6,57 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 Shaders for particle spawning
 */
 
-#define PARTICLE_WRITE 1
+#if DX_VERSION == 11
+// @compute_shader
+#endif
 
+#define PARTICLE_WRITE 1
 #include "hlsl_constant_globals.fx"
 
-#define UPDATE_CONSTANT(type, name, register_index) VERTEX_CONSTANT(type, name, register_index)
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
+#define PARTICLE_SPAWN
 
-#ifdef VERTEX_SHADER
+
+#if ((DX_VERSION == 9) && defined(VERTEX_SHADER)) || ((DX_VERSION == 11) && defined(COMPUTE_SHADER))
 #include "hlsl_vertex_types.fx"
 #include "effects\particle_spawn_registers.fx"	// must come before particle_common.fx
+#include "effects\particle_update_registers.fx"
+#if DX_VERSION == 11
+#include "effects\particle_state_buffer.fx"
+#include "effects\particle_index_registers.fx"
+#endif
 #include "effects\particle_common.fx"
 
 //This comment causes the shader compiler to be invoked for certain types
 //@generate particle
 
-#ifndef pc
-float4 particle_main( vertex_type IN ) :POSITION
+#if !defined(pc)
+float4 particle_main( vertex_type IN ) :SV_Position
 {
 	s_particle_state STATE= read_particle_state(IN.index);
 	static int2 dims= int2(16, 448);	// Make this linked to .cpp
 	int out_index= IN.address.x + IN.address.y * dims.x;
 	write_particle_state(STATE, out_index);
+	return 0;
 }
 #endif
 
-#ifdef pc
-float4 default_vs( vertex_type IN ) :POSITION
+#if defined(pc) && (DX_VERSION == 9)
+float4 default_vs( vertex_type IN ) :SV_Position
 {
 	return float4(1, 2, 3, 4);
+}
+#elif DX_VERSION == 11
+[numthreads(CS_PARTICLE_SPAWN_THREADS,1,1)]
+void default_cs(in uint raw_index : SV_DispatchThreadID)
+{
+	uint index = raw_index + particle_index_range.x;
+	if (index < particle_index_range.y)
+	{
+		uint packed_address = cs_particle_address_buffer[index];
+
+		uint out_index = (packed_address & 0xffff) + ((packed_address >> 16) * 16);
+		cs_particle_state_buffer[out_index] = cs_particle_state_spawn_buffer[index];
+	}
 }
 #else
 void default_vs( vertex_type IN )
@@ -57,7 +70,7 @@ void default_vs( vertex_type IN )
 
 #else	//#ifdef VERTEX_SHADER
 // Should never be executed
-float4 default_ps( void ) :COLOR0
+float4 default_ps( SCREEN_POSITION_INPUT(screen_position) ) :SV_Target0
 {
 	return float4(0,1,2,3);
 }

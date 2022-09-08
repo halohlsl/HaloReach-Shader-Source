@@ -6,19 +6,14 @@
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "hlsl_constant_globals.fx"
+#include "effects\lens_flare_registers.fx"
+#include "postprocess\postprocess_registers.fx"
+
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-
-// x is modulation factor, y is tint power, z is brightness, w unused
-PIXEL_CONSTANT(float4, modulation_factor, c50);
-PIXEL_CONSTANT(float4, tint_color, c51);
-PIXEL_CONSTANT( float4, scale, c2);
-VERTEX_CONSTANT(float4, center_rotation, c240);		// center(x,y), theta
-VERTEX_CONSTANT(float4, flare_scale, c241);			// scale(x, y), global scale
 void default_vs(
 	vertex_type IN,
-	out float4 position : POSITION,
+	out float4 position : SV_Position,
 	out float2 texcoord : TEXCOORD0)
 {
 	float sin_theta= sin(center_rotation.z);
@@ -34,13 +29,14 @@ void default_vs(
 
 
 float4 default_ps(
-	in float2 texcoord : TEXCOORD0) : COLOR
+	SCREEN_POSITION_INPUT(screen_position),
+	in float2 texcoord : TEXCOORD0) : SV_Target
 {
- 	float4 color=				tex2D(source_sampler, texcoord);
- 	float4 color_to_nth=		pow(color.g, modulation_factor.y);			// gamma-enhanced monochrome channel to generate 'hot' white centers
- 	
+ 	float4 color= sample2D(source_sampler, texcoord);
+ 	float4 color_to_nth=		pow(max(color.g, 0.00001), modulation_factor.y);			// gamma-enhanced monochrome channel to generate 'hot' white centers
+
  	float4 out_color=			modulation_factor.x*color_to_nth  +  color*tint_color;		// color tinted external areas for cool exterior
-	
+
  	float brightness= tint_color.a*ILLUM_EXPOSURE*scale.r*modulation_factor.z;
  	return out_color*brightness;
 }

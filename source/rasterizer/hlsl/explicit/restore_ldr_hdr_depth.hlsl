@@ -1,25 +1,26 @@
 //#line 2 "source\rasterizer\hlsl\restore_ldr_hdr_depth.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D ldr_sampler : register(s0);
-sampler2D depth_sampler : register(s2);
+LOCAL_SAMPLER_2D(ldr_sampler, 0);
+LOCAL_SAMPLER_2D(depth_sampler, 2);
 
 struct triple_out
 {
-	float4 color[2] : COLOR0;
+	float4 color[2] : SV_Target0;
 };
 
-triple_out default_ps(screen_output IN, float2 pixel_coordinates : VPOS)
+triple_out default_ps(screen_output IN, SCREEN_POSITION_INPUT(pixel_coordinates))
 {
 	triple_out out_colors;
-	
+
 	float4 ldr_color, hdr_color;
 #ifdef pc
-	ldr_color= tex2D(ldr_sampler, IN.texcoord);
+	ldr_color= sample2D(ldr_sampler, IN.texcoord);
 #else
 	asm
 	{
@@ -27,10 +28,10 @@ triple_out default_ps(screen_output IN, float2 pixel_coordinates : VPOS)
 	};
 #endif
  	out_colors.color[1]= ldr_color;
- 	
+
 	float4 depth_color;
 #ifdef pc
-	depth_color= tex2D(depth_sampler, IN.texcoord);
+	depth_color= sample2D(depth_sampler, IN.texcoord);
 #else
  	float column= pixel_coordinates.x / 80;
  	float halfcolumn= frac( column );

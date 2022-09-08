@@ -3,8 +3,8 @@
 
 struct albedo_pixel
 {
-	float4 albedo_specmask : COLOR0;		// albedo color (RGB) + specular mask (A)
-	float4 normal : COLOR1;					// normal (XYZ)
+	float4 albedo_specmask : SV_Target0;		// albedo color (RGB) + specular mask (A)
+	float4 normal : SV_Target1;					// normal (XYZ)
 };
 
 
@@ -19,6 +19,5 @@ albedo_pixel convert_to_albedo_target(in float4 albedo, in float3 normal, in flo
 	
 	return result;
 }
-
 
 

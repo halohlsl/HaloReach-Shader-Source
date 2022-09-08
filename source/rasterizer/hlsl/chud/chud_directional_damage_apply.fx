@@ -11,13 +11,13 @@
 
 // ==== SHADER DOCUMENTATION
 // shader: chud_simple
-// 
+//
 // ---- COLOR OUTPUTS
 // color output A= solid color
 // color output B= unused
 // color output C= unused
 // color output D= unused
-// 
+//
 // ---- SCALAR OUTPUTS
 // scalar output A= unused
 // scalar output B= unused
@@ -32,7 +32,7 @@
 // G: selects between primary (0) and secondary (255) color
 // B: highlight channel
 
-sampler2D damage_sampler : register(s1);
+LOCAL_SAMPLER_2D(damage_sampler, 1);
 
 chud_output default_vs(vertex_type IN)
 {
@@ -44,7 +44,7 @@ chud_output default_vs(vertex_type IN)
 		virtual_position.x/chud_screen_size.z,
 		virtual_position.y/chud_screen_size.w,
 		virtual_position.z);
-    
+
 	//OUT.VirtualPos= float4(virtual_position_unity, 0);
 	float4 hposition=	chud_virtual_to_screen(virtual_position);
     OUT.HPosition=		hposition;
@@ -55,13 +55,13 @@ chud_output default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-float4 default_ps(chud_output IN) : COLOR
+float4 default_ps(chud_output IN) : SV_Target
 {
-	float4 foreground=	tex2D(damage_sampler, IN.Texcoord);				// damage blend
+	float4 foreground= sample2D(damage_sampler, IN.Texcoord);		// damage blend
 	foreground.rgb	*=	foreground.rgb;
 
-	float4 other_guy=	tex2D(basemap_sampler, IN.MicroTexcoord);		// microtexture
-	
+	float4 other_guy= sample2D(basemap_sampler, IN.MicroTexcoord);		// microtexture
+
 	float4 result=		foreground * other_guy * float4(other_guy.aaa * 8, LDR_ALPHA_ADJUST);		// ###ctchou $NOTE : the * 8 is to make it backwards compatible with the old render that was assuming we were writing to the HDR target where the white point is at 1/8
 																									// now we are writing to the final render target with the white point at 1.0, so we have to multiply by 8 to make it exactly the same as before (See bug 37459)
 

@@ -11,6 +11,7 @@ Friday February 23, 2007, 12:05pm Stefan S.
 #define POSTPROCESS_COLOR
 
 #define LDR_ONLY // needed for using convert_to_render_target()
+#include "hlsl_constant_globals.fx"
 #include "explicit\player_emblem.fx"
 #include "postprocess\postprocess.fx"
 
@@ -21,7 +22,7 @@ Friday February 23, 2007, 12:05pm Stefan S.
 
 // pixel fragment entry points
 
-accum_pixel default_ps(screen_output IN) : COLOR
+accum_pixel default_ps(screen_output IN) : SV_Target
 {
 	/*
 	struct screen_output
@@ -32,9 +33,9 @@ accum_pixel default_ps(screen_output IN) : COLOR
 	};
 	*/
 	float4 emblem_pixel= calc_emblem(IN.texcoord, true);
-	
+
 	// cap transparency against the vertex color
 	emblem_pixel.a= min(emblem_pixel.a, IN.color.a);
-	
+
 	return convert_to_render_target(emblem_pixel, false, false);
 }

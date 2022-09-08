@@ -1,16 +1,17 @@
 //#line 2 "source\rasterizer\hlsl\gradient.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
+LOCAL_SAMPLER_2D(source_sampler, 0);
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 #ifdef pc
- 	float4 color= tex2D(source_sampler, IN.texcoord);
+ 	float4 color= sample2D(source_sampler, IN.texcoord);
  #else
 	float4 color_o, color_x, color_y;
 	float2 texcoord= IN.texcoord;
@@ -22,7 +23,7 @@ float4 default_ps(screen_output IN) : COLOR
 	};
 	float4 gradient_x= (color_x - color_o);
 	float4 gradient_y= (color_y - color_o);
-	
+
 	float4 gradient_magnitude= sqrt(gradient_x * gradient_x + gradient_y * gradient_y);
 	float4 color= gradient_magnitude;
 #endif

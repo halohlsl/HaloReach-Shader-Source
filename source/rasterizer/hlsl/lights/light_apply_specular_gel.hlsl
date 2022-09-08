@@ -2,10 +2,11 @@
 //@generate tiny_position
 //@entry default
 //@entry albedo
+//@entry active_camo
 
 //#define SHADER_ATTRIBUTES										[maxtempreg(5)]
 #define COMBINE_LOBES(cosine_lobe, specular_lobe, albedo)		(cosine_lobe * albedo.rgb + specular_lobe * albedo.a)
-#define LIGHT_COLOR												(p_lighting_constant_4.rgb * texCUBE(gel_sampler, light_to_fragment_lightspace.xyz).rgb)
+#define LIGHT_COLOR												(light_colour_falloff_power.rgb * sampleCUBE(gel_sampler_cube, light_to_fragment_lightspace.xyz).rgb)
 #define DEFORM													deform_tiny_position
 
 

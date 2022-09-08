@@ -6,13 +6,9 @@
 
 
 #include "hlsl_constant_globals.fx"
+#include "explicit\render_lightning_registers.fx"
 
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#undef SAMPLER_CONSTANT
-
-
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 void default_vs(out float4 out_position : POSITION)		{ out_position= 0.0f; }
 float4 default_ps() : COLOR0							{ return 0.0f; }
 #else // XENON
@@ -20,16 +16,12 @@ float4 default_ps() : COLOR0							{ return 0.0f; }
 
 #ifdef VERTEX_SHADER
 
-sampler2D	data_texture : register(s0);
-
-float4		g_read_transform : register(c100);
-
 #define SPLASH_SIZE 0.08f
 #define SPLASH_OFFSET -0.04f
 
 void default_vs(
-	in int index						:	INDEX,
-	out float4	out_position			:	POSITION,
+	in uint index						:	SV_VertexID,
+	out float4	out_position			:	SV_Position,
 	out float4	out_texcoord			:	TEXCOORD0)
 {
 	float3		verts[4]=
@@ -43,34 +35,38 @@ void default_vs(
     // what raindrop are we?   4 verts per raindrop
     float	render_index=	floor(index * (1.0f / VERTS_PER_PARTICLE) + (0.5f / VERTS_PER_PARTICLE));
 	float2 particle_index=	render_index * g_read_transform.xy + g_read_transform.zw;
-	
+
 	float vert_index= index - particle_index * VERTS_PER_PARTICLE;
 
 	// fetch rain splash data
 	float4 data;
+#ifdef xenon
 	asm
 	{
 		tfetch2D	data.zyxw,	particle_index.xy,	data_texture,		UnnormalizedTextureCoords= true,	MagFilter= point,	MinFilter= point,	MipFilter= point,	AnisoFilter= disabled,	UseComputedLOD= false,  UseRegisterGradients=false
 	};
+#elif DX_VERSION == 11
+	data= g_lightning_buffer[particle_index.x];
+#endif
 
 	float3 position_world=		data.xyz;
 	float  time=				1.0f;	// splash_data.w;
-	
+
 	float3 splash_to_camera_world=	position_world - Camera_Position;
 	float distance=	length(splash_to_camera_world.xyz);
 	splash_to_camera_world /= distance;
-	
+
 	float2x3 basis;
 	basis[0]= -Camera_Right;
 	basis[1]= Camera_Up;
 //	basis[2]= Camera_Forward;
-	
+
 	float2 local_pos=	verts[vert_index].xy * SPLASH_SIZE + SPLASH_OFFSET;
 	out_position=		float4(position_world + mul(local_pos.xy, basis), 1.0f);
 	out_position=		mul(out_position, View_Projection);
-	
+
 	float alpha=		saturate(1.0f - time);	//  * saturate(distance * SPLASH_NEAR_FADE_SCALE + SPLASH_NEAR_FADE_OFFSET);
-	
+
 //	if (alpha <= 0.0f)
 //	{
 //		out_position.xyz=	NaN;
@@ -86,12 +82,9 @@ void default_vs(
 
 #ifdef PIXEL_SHADER
 
-sampler2D	splash_texture : register(s0);
-
-float4 g_color : register(c100);
 
 float4 default_ps(
-	in float4	texcoord			:	TEXCOORD0) : COLOR0
+	in float4	texcoord			:	TEXCOORD0) : SV_Target0
 {
 	texcoord.xy -= 0.5f;
 	float scale=	saturate(1.0f - length(texcoord.xy) * 2.0f);

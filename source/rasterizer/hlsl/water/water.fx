@@ -1,7 +1,7 @@
 /*
 WATER.FX
 Copyright (c) Microsoft Corporation, 2005. all rights reserved.
-04/12/2006 13:36 davcook	
+04/12/2006 13:36 davcook
 */
 
 //This comment causes the shader compiler to be invoked for certain types
@@ -24,17 +24,6 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #define	BLEND_MODE_OFF	//	no blend for water
 
 // Attempt to auto-synchronize constant and sampler registers between hlsl and cpp code.
-#undef VERTEX_CONSTANT
-#undef PIXEL_CONSTANT
-#ifdef VERTEX_SHADER
-	#define VERTEX_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-	#define PIXEL_CONSTANT(type, name, register_index)   type name;
-#else
-	#define VERTEX_CONSTANT(type, name, register_index)   type name;
-	#define PIXEL_CONSTANT(type, name, register_index)   type name : register(c##register_index);
-#endif
-#define BOOL_CONSTANT(name, register_index)   bool name : register(b##register_index);
-#define SAMPLER_CONSTANT(name, register_index)	sampler2D name : register(s##register_index);
 #include "water\water_registers.fx"
 
 
@@ -48,7 +37,7 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #define IF_NOT_CATEGORY_OPTION(cat, opt) if (!TEST_CATEGORY_OPTION(cat, opt))
 
 
-// rename entry point of water passes 
+// rename entry point of water passes
 #define water_dense_per_pixel_vs		static_per_pixel_vs
 #define water_dense_per_pixel_ps		static_per_pixel_ps
 
@@ -62,7 +51,7 @@ Copyright (c) Microsoft Corporation, 2005. all rights reserved.
 #define water_flat_blend_per_vertex_vs	albedo_vs
 #define water_flat_blend_per_vertex_ps	albedo_ps
 
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 
 struct s_water_interpolators
 {
@@ -97,106 +86,154 @@ DEFINE_NULL_SHADER(water_flat_blend_per_vertex)
 #else //xenon
 
 /* Water profile contants and textures from tag*/
-sampler3D wave_displacement_array;
-float4 wave_displacement_array_xform;
+PARAM_SAMPLER_2D_ARRAY(wave_displacement_array);
+PARAM(float4, wave_displacement_array_xform);
 
-sampler3D wave_slope_array;
-float4 wave_slope_array_xform;
-float wave_height_aux;
-float time_warp_aux;
+PARAM_SAMPLER_2D_ARRAY(wave_slope_array);
+PARAM(float4, wave_slope_array_xform);
+PARAM(float, wave_height_aux);
+PARAM(float, time_warp_aux);
 
-float slope_scaler;
+PARAM(float, slope_scaler);
 
 // no use samplers
-sampler wave_mapping;
-sampler subwave_1_mapping;
-sampler subwave_2_mapping;
+PARAM_SAMPLER_2D(wave_mapping);
+PARAM_SAMPLER_2D(subwave_1_mapping);
+PARAM_SAMPLER_2D(subwave_2_mapping);
 
 // waveshape parameters for ocean
-float wave_height;
-float time_warp;
-float wave_orientation;
-float4 wave_mapping_xform;
+PARAM(float, wave_height);
+PARAM(float, time_warp);
+PARAM(float, wave_orientation);
+PARAM(float4, wave_mapping_xform);
 
-float subwave_1_height;
-float subwave_1_time_warp;
-float4 subwave_1_mapping_xform;
+PARAM(float, subwave_1_height);
+PARAM(float, subwave_1_time_warp);
+PARAM(float4, subwave_1_mapping_xform);
 
-float subwave_2_height;
-float subwave_2_time_warp;
-float4 subwave_2_mapping_xform;
+PARAM(float, subwave_2_height);
+PARAM(float, subwave_2_time_warp);
+PARAM(float4, subwave_2_mapping_xform);
 
-sampler watercolor_texture;
-float4 watercolor_texture_xform;
+PARAM_SAMPLER_2D(watercolor_texture);
+PARAM(float4, watercolor_texture_xform);
 
-sampler global_shape_texture;
-float4 global_shape_texture_xform;
+PARAM_SAMPLER_2D(global_shape_texture);
+PARAM(float4, global_shape_texture_xform);
 
-samplerCUBE environment_map;
+PARAM_SAMPLER_CUBE(environment_map);
 
 // foam texture
-sampler foam_texture;
-float4 foam_texture_xform;
-sampler foam_texture_detail;
-float4 foam_texture_detail_xform;
-float foam_cut;
-float foam_pow;
-float foam_start_side;
-float foam_coefficient;
+PARAM_SAMPLER_2D(foam_texture);
+PARAM(float4, foam_texture_xform);
+PARAM_SAMPLER_2D(foam_texture_detail);
+PARAM(float4, foam_texture_detail_xform);
+PARAM(float, foam_cut);
+PARAM(float, foam_pow);
+PARAM(float, foam_start_side);
+PARAM(float, foam_coefficient);
 
 // wave shape
-float choppiness_forward;
-float choppiness_backward;
-float choppiness_side;
-float wave_visual_damping_distance;
-float subwave_visual_damping_distance;
-float ocean_altitude;
+PARAM(float, choppiness_forward);
+PARAM(float, choppiness_backward);
+PARAM(float, choppiness_side);
+PARAM(float, wave_visual_damping_distance);
+PARAM(float, subwave_visual_damping_distance);
+PARAM(float, ocean_altitude);
 
-float wave_tessellation_level;
+PARAM(float, wave_tessellation_level);
 
-float detail_slope_scale_x;
-float detail_slope_scale_y;
-float detail_slope_scale_z;
-float detail_slope_steepness;
+PARAM(float, detail_slope_scale_x);
+PARAM(float, detail_slope_scale_y);
+PARAM(float, detail_slope_scale_z);
+PARAM(float, detail_slope_steepness);
 
 // refraction settings
-float refraction_texcoord_shift;
-float refraction_extinct_distance;
-float minimal_wave_disturbance;
+PARAM(float, refraction_texcoord_shift);
+PARAM(float, refraction_extinct_distance);
+PARAM(float, minimal_wave_disturbance);
 
 // water appearance
-float reflection_coefficient;
-float sunspot_cut;
-float shadow_intensity_mark;
-float normal_variation_tweak;
+PARAM(float, reflection_coefficient);
+PARAM(float, sunspot_cut);
+PARAM(float, shadow_intensity_mark);
+PARAM(float, normal_variation_tweak);
 
-float fresnel_coefficient;
-float fresnel_dark_spot;
-float3 water_color_pure;
-float watercolor_coefficient;
-float3 water_diffuse;
-float water_murkiness;
+PARAM(float, fresnel_coefficient);
+PARAM(float, fresnel_dark_spot);
+PARAM(float3, water_color_pure);
+PARAM(float, watercolor_coefficient);
+PARAM(float3, water_diffuse);
+PARAM(float, water_murkiness);
 
 // bank alpha
-float bankalpha_infuence_depth;
+PARAM(float, bankalpha_infuence_depth);
 
 // global shape
-float globalshape_infuence_depth;
+PARAM(float, globalshape_infuence_depth);
 
 //	ignore the vertex_type, input vertex type defined locally
 struct s_vertex_type_water_tessellation
 {
-	int index		:	INDEX;
+	uint index		:	SV_VertexID;
 };
+
+#ifdef pc
+
+#define PC_WATER_TESSELLATION
 
 struct s_vertex_type_water_shading
 {
-	int index		:	INDEX;
- 
+#ifdef PC_WATER_TESSELLATION
+	//float4	pos1xyz_tc1x		: POSITION0;
+	//float4	tc1y_tan1xyz		: POSITION1;
+	//float4	bin1xyz_lm1x		: POSITION2;
+	//float4	lm1y_pos2xyz		: POSITION3;
+	//float4	tc2xy_tan2xy		: POSITION4;
+   	//float4	tan2z_bin2xyz		: POSITION5;
+   	//float4	lm2xy_pos3xy		: POSITION6;
+   	//float4	pos3z_tc3xy_tan3x	: POSITION7;
+   	//float4	tan3yz_bin3xy		: TEXCOORD0;
+   	//float3	bin3z_lm3xy			: TEXCOORD1;
+
+	float4	pos1xyz_tc1x		: POSITION0;
+	float4	tc1y_tan1xyz		: POSITION1;
+	float4	bin1xyz_lm1x		: POSITION2;
+	float4	lm1y_mi1_pos2xy		: POSITION3;
+	float4	posz_tc2xy_tan2x	: POSITION4;
+	float4	tan2yz_bin2xy		: POSITION5;
+	float4	bin2z_lm2xy_mi2		: POSITION6;
+	float4	pos3xyz_tc3x		: POSITION7;
+	float4	tc3y_tan3xyz		: TEXCOORD0;
+	float4	bin3xyz_lm3x		: TEXCOORD1;
+	float2	lm3y_mi3			: TEXCOORD2;
+
+	float4	bt1xy_bt2xy			: NORMAL0;
+	float2	bt3xy				: NORMAL1;
+
+   	float3	bc					: TEXCOORD3;
+#else
+	float3   position		    : POSITION0;
+	float2   texcoord		    : TEXCOORD0;
+	float3   normal            	: NORMAL;
+	float3   tangent           	: TANGENT;
+	float3   binormal          	: BINORMAL;
+
+	float2   lm_tex            	: TEXCOORD1;
+
+	float3   base_texcoord     	: POSITION3;
+#endif
+};
+#else
+struct s_vertex_type_water_shading
+{
+	int index		:	SV_VertexID;
+
 	// tessellation parameter
 	float3 uvw		:	BARYCENTRIC;
-	int quad_id		:	QUADID;	
+	int quad_id		:	QUADID;
 };
+#endif // pc
 
 
 struct s_water_render_vertex
@@ -211,18 +248,18 @@ struct s_water_render_vertex
 	float3 vmf_intensity;
 };
 
-// The following defines the protocol for passing interpolated data between the vertex shader 
-// and the pixel shader.  
+// The following defines the protocol for passing interpolated data between the vertex shader
+// and the pixel shader.
 struct s_water_interpolators
 {
-	float4 position		:POSITION0;
-	float4 texcoord		:TEXCOORD0;		// defaul texcoord.uv, 
+	float4 position		:SV_Position;
+	float4 texcoord		:TEXCOORD0;		// defaul texcoord.uv,
 	float4 normal		:TEXCOORD1;		// tangent space
-	float4 tangent		:TEXCOORD2;
-	float4 binormal		:TEXCOORD3;	
+	float4 tangent		:TEXCOORD2;		// w = misc_info.x = height_scale
+	float4 binormal		:TEXCOORD3;		// w = misc_info.y = height_scale_aux
 	float4 position_ss	:TEXCOORD4;		//	position in screen space
 	float4 incident_ws	:TEXCOORD5;		//	view incident direction in world space, incident_ws.w store the distannce between eye and current vertex
-	float4 position_ws  :TEXCOORD6;		
+	float4 position_ws  :TEXCOORD6;		// w = misc_info.w = water_depth
 	float4 base_tex		:TEXCOORD7;		// x, y (texcoord) z, w(vmf_intensity)		// texcoord_ripple.uv
 	float4 lm_tex		:TEXCOORD8;		// lightmap color or uv coord
 };
@@ -230,7 +267,7 @@ struct s_water_interpolators
 //	structure definition for underwater
 struct s_underwater_vertex_input
 {
-	int index		:	INDEX;
+	int index		:	SV_VertexID;
 };
 
 /* implementation */

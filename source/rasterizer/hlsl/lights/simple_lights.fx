@@ -3,7 +3,7 @@
 
 /*
 	simple lights are organized as an array of 16 structs consisting of 4 float4's
-	
+
 		position (xyz)		size (w)
 		direction (xyz)		spherical % (w)
 		color (xyz)			smooth (w)
@@ -12,12 +12,12 @@
 
 
 #include "shared\constants.fx"
+#include "shared\utilities.fx"
 
 #ifndef SIMPLE_LIGHT_DATA
 #define SIMPLE_LIGHT_DATA simple_lights
 #define SIMPLE_LIGHT_COUNT simple_light_count
 #endif // !SIMPLE_LIGHT_DATA
-
 
 void calculate_simple_light(
 		uniform int light_index,
@@ -27,9 +27,11 @@ void calculate_simple_light(
 {
 #ifdef dynamic_lights_use_array_notation
 #define		LIGHT_DATA(offset, registers)	(SIMPLE_LIGHT_DATA[light_index][(offset)].registers)
-#else // XENON
+#elif DX_VERSION == 9
 #define		LIGHT_DATA(offset, registers)	(SIMPLE_LIGHT_DATA[light_index + (offset)].registers)
-#endif // XENON
+#elif DX_VERSION == 11
+#define		LIGHT_DATA(offset, registers)	(SIMPLE_LIGHT_DATA[(light_index * 5) + (offset)].registers)
+#endif
 
 #define		LIGHT_POSITION			LIGHT_DATA(0, xyz)
 #define		LIGHT_DIRECTION			LIGHT_DATA(1, xyz)
@@ -48,12 +50,12 @@ void calculate_simple_light(
 	float  light_dist2= dot(fragment_to_light, fragment_to_light);				// distance to the light, squared
 	float distance= sqrt(light_dist2);
 	fragment_to_light /= distance;									// normalized vector pointing to the light
-		
+
 	float2 falloff;
 	falloff.x= saturate( (LIGHT_FAR_ATTENUATION_END  - distance) * LIGHT_FAR_ATTENUATION_RATIO) ; // distance based falloff				(2 instructions)
 	falloff.x*=falloff.x;
 	falloff.y= saturate( ( dot(fragment_to_light, LIGHT_DIRECTION) - LIGHT_COSINE_CUTOFF_ANGLE ) * LIGHT_ANGLE_FALLOFF_RAIO);
-	falloff.y= pow(falloff.y, LIGHT_ANGLE_FALLOFF_POWER);
+	falloff.y= safe_pow(falloff.y, LIGHT_ANGLE_FALLOFF_POWER);
 #ifdef pc
 	falloff.y= abs(falloff.y);
 #endif //pc
@@ -69,9 +71,9 @@ void calc_simple_lights_analytical_diffuse_only(
 		out float3 diffusely_reflected_light)						// diffusely reflected light (not including diffuse surface color)
 {
 	diffusely_reflected_light= float3(0.0f, 0.0f, 0.0f);
-	
+
 	// add in simple lights
-	#ifndef pc	
+	#ifndef pc
 		[loop]
 	#endif
 	for (int light_index= 0; light_index < SIMPLE_LIGHT_COUNT; light_index++)
@@ -89,18 +91,18 @@ void calc_simple_lights_analytical_diffuse_only(
 			//specularly_reflected_light += float3( 0, 1, 0 );
 			continue;
 		}
-		
+
 		float3 fragment_to_light;
 		float3 light_radiance;
 		calculate_simple_light(
 			light_index, fragment_position_world, light_radiance, fragment_to_light);
-		
+
 		// calculate diffuse cosine lobe (diffuse surface N dot L)
 		float cosine_lobe= dot(surface_normal, fragment_to_light) + diffuse_light_cosine_raise;  // + 0.05 so that the grenade on the ground can work well.
-		
+
 		diffusely_reflected_light  += light_radiance * saturate(cosine_lobe) / pi;			// add light with cosine lobe (clamped positive)
-		
-		#ifdef pc
+
+		#if defined(pc) && (DX_VERSION == 9)
 			if (light_index >= 7)		// god damn PC compiler likes to unroll these loops - only support 8 lights or so (:P)
 			{
 				light_index= 100;
@@ -119,9 +121,9 @@ void calc_simple_lights_analytical(
 {
 	diffusely_reflected_light= float3(0.0f, 0.0f, 0.0f);
 	specularly_reflected_light= float3(0.0f, 0.0f, 0.0f);
-	
+
 	// add in simple lights
-#ifndef pc	
+#ifndef pc
 	[loop]
 #endif
 	for (int light_index= 0; light_index < SIMPLE_LIGHT_COUNT; light_index++)
@@ -139,22 +141,22 @@ void calc_simple_lights_analytical(
 			//specularly_reflected_light += float3( 0, 1, 0 );
 			continue;
 		}
-		
+
 		float3 fragment_to_light;
 		float3 light_radiance;
 		calculate_simple_light(
 			light_index, fragment_position_world, light_radiance, fragment_to_light);
-		
+
 		// calculate diffuse cosine lobe (diffuse surface N dot L)
 		float cosine_lobe= dot(surface_normal, fragment_to_light) + diffuse_light_cosine_raise;  // + 0.05 so that the grenade on the ground can work well.
-		
+
 		diffusely_reflected_light  += light_radiance * saturate(cosine_lobe) / pi;			// add light with cosine lobe (clamped positive)
-		
+
 		// step(0.0f, cosine_lobe)
 		//specularly_reflected_light += light_radiance * pow(max(0.0f, dot(fragment_to_light, view_reflect_dir_world)), specular_power);
 		float specular_cosine_lobe= saturate(dot(fragment_to_light, view_reflect_dir_world));
 		specularly_reflected_light += light_radiance * pow(specular_cosine_lobe, specular_power);
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 		if (light_index >= 7)		// god damn PC compiler likes to unroll these loops - only support 8 lights or so (:P)
 		{
 			light_index= 100;
@@ -196,9 +198,9 @@ void calc_simple_lights_analytical_diffuse_translucent(
 		out float3 diffusely_reflected_light)						// specularly reflected light (not including specular surface color)
 {
 	diffusely_reflected_light= float3(0.0f, 0.0f, 0.0f);
-	
+
 	// add in simple lights
-#ifndef pc	
+#ifndef pc
 	[loop]
 #endif
 	for (int light_index= 0; light_index < SIMPLE_LIGHT_COUNT; light_index++)
@@ -216,15 +218,15 @@ void calc_simple_lights_analytical_diffuse_translucent(
 			//specularly_reflected_light += float3( 0, 1, 0 );
 			continue;
 		}
-		
+
 		float3 fragment_to_light;
 		float3 light_radiance;
 		calculate_simple_light(
 			light_index, fragment_position_world, light_radiance, fragment_to_light);
-				
+
 		diffusely_reflected_light  += light_radiance * calc_diffuse_translucent_lobe(surface_normal, fragment_to_light, translucency);
-		
-#ifdef pc
+
+#if defined(pc) && (DX_VERSION == 9)
 		if (light_index >= 7)		// god damn PC compiler likes to unroll these loops - only support 8 lights or so (:P)
 		{
 			light_index= 100;

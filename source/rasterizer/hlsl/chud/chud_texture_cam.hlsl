@@ -34,7 +34,7 @@
 // G: selects between primary (255) and secondary (0) color
 // B: highlight channel
 
-sampler2D texturecam_sampler : register(s1);
+LOCAL_SAMPLER_2D(texturecam_sampler, 1);
 
 chud_output default_vs(vertex_type IN)
 {
@@ -50,15 +50,15 @@ chud_output default_vs(vertex_type IN)
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
-	float4 texcam_result= tex2D(texturecam_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
+	float4 texcam_result= sample2D(texturecam_sampler, texcoord);
 	bitmap_result.rgb*=texcam_result.rgb;
 
 	return bitmap_result;
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 	float4 result= build_subpixel_result(IN.Texcoord);
 

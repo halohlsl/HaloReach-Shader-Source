@@ -2,7 +2,7 @@
 
 //@generate tiny_position
 
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 #define BILINEAR_SHADOWS
 #endif // pc
 

@@ -26,7 +26,7 @@
 // color output B= unused
 // color output C= unused
 // color output D= unused
-// 
+//
 // ---- SCALAR OUTPUTS
 // scalar output A= scaled health
 // scalar output B= scaled damage
@@ -55,8 +55,8 @@ chud_output default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-float4 default_ps(chud_output IN) : COLOR
-{	
+float4 default_ps(chud_output IN) : SV_Target
+{
 	float x= abs(IN.Texcoord.x-0.5);
 	float y= abs(IN.Texcoord.y-0.5);
 	float outer_t= max(x, y);

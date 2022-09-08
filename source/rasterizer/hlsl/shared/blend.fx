@@ -17,7 +17,7 @@
 	#define BLEND_TYPE_pre_multiplied_alpha 5
 
 	#define BLEND_MODE(mode)		BLEND_TYPE(blend_type) == BLEND_TYPE_##mode
-	
+
 #endif
 
 // define blend source
@@ -86,47 +86,47 @@
 
 /* ------- alpha blend source */
 
-float opacity_fresnel_coefficient;
-float opacity_fresnel_curve_steepness;
-float opacity_fresnel_curve_bias;
+PARAM(float, opacity_fresnel_coefficient);
+PARAM(float, opacity_fresnel_curve_steepness);
+PARAM(float, opacity_fresnel_curve_bias);
 
-sampler opacity_texture;
-float4 opacity_texture_xform;
+PARAM_SAMPLER_2D(opacity_texture);
+PARAM(float4, opacity_texture_xform);
 
 static float calc_fresnel_opacity(
 	in float fresnel_coefficient,
 	in float fresnel_curve_steepness,
-	in float fresnel_curve_bias,	
+	in float fresnel_curve_bias,
 	in float3 surface_normal,
 	in float3 view_dir)
 {
 	const float n_dot_v= dot(surface_normal, view_dir);
-	float fresnel_opacity= 			
-			fresnel_coefficient* pow(saturate(1.0 - n_dot_v), fresnel_curve_steepness) + 
-			fresnel_curve_bias;		
+	float fresnel_opacity=
+			fresnel_coefficient* pow(saturate(1.0 - n_dot_v), fresnel_curve_steepness) +
+			fresnel_curve_bias;
 	if (n_dot_v > 0.0)
 		return saturate(fresnel_opacity);
 	else
 		return 0.0f;
 }
 
-void calc_alpha_blend_opacity(		
+void calc_alpha_blend_opacity(
 	in float albedo_opacity,
 	in float3 surface_normal,
 	in float3 view_dir,
 	in float2 texcoord,
-	out float final_opacity,		
-	out float specular_scalar)		// scale specular and envmap	
-{		
+	out float final_opacity,
+	out float specular_scalar)		// scale specular and envmap
+{
 	final_opacity= albedo_opacity;
 	specular_scalar= 1.0f;
 
 #ifdef PIXEL_SHADER
 
-	#if defined(BLEND_MODE_OFF) || ALPHA_BLEND_SOURCE(albedo_alpha_without_fresnel)			
+	#if defined(BLEND_MODE_OFF) || ALPHA_BLEND_SOURCE(albedo_alpha_without_fresnel)
 
-	#else		
-			
+	#else
+
 		float fresnel_opacity= calc_fresnel_opacity(
 			opacity_fresnel_coefficient, opacity_fresnel_curve_steepness, opacity_fresnel_curve_bias,
 			surface_normal, view_dir);
@@ -135,7 +135,7 @@ void calc_alpha_blend_opacity(
 			final_opacity= 1.0f - (1 - albedo_opacity)*(1 - fresnel_opacity);
 
 		#else
-			float4 opacity= tex2D(opacity_texture, texcoord*opacity_texture_xform.xy + opacity_texture_xform.zw);
+			float4 opacity= sample2D(opacity_texture, texcoord*opacity_texture_xform.xy + opacity_texture_xform.zw);
 
 			#if ALPHA_BLEND_SOURCE(opacity_map_alpha)
 				final_opacity= 1.0f - (1 - opacity.a)*(1 - fresnel_opacity);

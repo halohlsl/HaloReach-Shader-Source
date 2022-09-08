@@ -1,21 +1,14 @@
 #define POSTPROCESS_USE_CUSTOM_VERTEX_SHADER
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
 #include "shared\texture_xform.fx"
 
 
-#undef PIXEL_CONSTANT
-#undef VERTEX_CONSTANT
 #include "hlsl_registers.fx"
-#define	SHADER_CONSTANT(	hlsl_type,	hlsl_name,	code_name,	register_start,	register_count,	scope, register_bank, stage, command_buffer_option)		hlsl_type hlsl_name stage##_REGISTER(register_bank##register_start);
-	#include "hlsl_constant_declaration_defaults.fx"
-	#include "postprocess\final_composite_registers.fx"
-	#include "hlsl_constant_declaration_defaults_end.fx"
-#undef SHADER_CONSTANT
-#undef VERTEX_REGISTER
-#undef PIXEL_REGISTER
+#include "postprocess\final_composite_registers.fx"
 
 
 
@@ -48,7 +41,7 @@
 
 struct final_composite_screen_output
 {
-	float4 position:		 POSITION;
+	float4 position:		 SV_Position;
 	float2 texcoord:		 TEXCOORD0;
 	float4 xformed_texcoord: TEXCOORD1;	// xy - pixel-space texcoord, zw - noise-space texcoord
 };
@@ -65,7 +58,7 @@ final_composite_screen_output default_vs(vertex_type IN)
 	float2 pixel_space_texcoord= IN.texcoord * pixel_space_xform.xy + pixel_space_xform.zw;
 
 	// Transform pixel space texture coordinates to tile the noise texture such as to maintain 1:1 fetch ratio
-	float2 noise_space_texcoord= pixel_space_texcoord * noise_space_xform.xy + noise_space_xform.zw;	
+	float2 noise_space_texcoord= pixel_space_texcoord * noise_space_xform.xy + noise_space_xform.zw;
 
 	OUT.xformed_texcoord= float4( pixel_space_texcoord, noise_space_texcoord );
 
@@ -74,29 +67,33 @@ final_composite_screen_output default_vs(vertex_type IN)
 
 struct s_default_ps_output
 {
-	float4 color : COLOR0;
+	float4 color : SV_Target0;
 };
 
 struct s_antialiased_ps_output
 {
-    float4 antialias_result	: COLOR0;
-    float4 curframe_result	: COLOR1;
+    float4 antialias_result	: SV_Target0;
+    float4 curframe_result	: SV_Target1;
 };
 
 
 float4 default_combine_optimized(in float2 texcoord)						// final game code: single sample LDR surface, use hardcoded hardware curve
 {
-	return tex2D(surface_sampler, texcoord) * float4(DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, 32.0f);
+	return sample2D(surface_sampler, texcoord) * float4(DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, 32.0f);
 }
 
 
 float4 default_combine_antialiased(in float2 texcoord, in bool centered)
 {
-#ifdef pc
-	return tex2D(surface_sampler, texcoord) * float4(DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, 32.0f);
+#if defined(pc) && (DX_VERSION == 9)
+	return sample2D(surface_sampler, texcoord) * float4(DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, DARK_COLOR_MULTIPLIER, 32.0f);
 #else // xenon
 
+#ifdef xenon
 	#define tfetch(color, texcoord, sampler, offsetx, offsety)		asm	{	tfetch2D color, texcoord, sampler, MagFilter= point, MinFilter= point, MipFilter= point, AnisoFilter= disabled, OffsetX= offsetx, OffsetY= offsety	}
+#elif DX_VERSION == 11
+	#define tfetch(color, texcoord, sampler, offsetx, offsety) 		color= sampler.t.Sample(sampler.s, texcoord, int2(offsetx, offsety));
+#endif
 
     float4 color;
     if (centered)
@@ -104,7 +101,7 @@ float4 default_combine_antialiased(in float2 texcoord, in bool centered)
 		tfetch(color, texcoord, surface_sampler, 0.0f,  0.0f);
     }
     else
-    {       
+    {
        float4 temp;
        tfetch(temp, texcoord, surface_sampler,  0.0f,  0.0f);
 		 color=		temp;
@@ -126,15 +123,16 @@ float4 default_combine_antialiased(in float2 texcoord, in bool centered)
 // Note that we're expecting the texture coordinate already be transformed to pixel space when this method is called:
 float4 default_calc_bloom(in float2 pixel_space_texcoord)
 {
-	float4 bloom=	tex2D_offset(bloom_sampler, pixel_space_texcoord, 0, 0);
-//	return float4(bloom.rgb * bloom.rgb, bloom.a);					// 8-bit gamma2 (###ctchou $TODO)
+	// bloom has -2 exp bias, but +5 exp surface. Total +3 exp bias
+	float4 bloom = tex2D_offset(bloom_sampler, pixel_space_texcoord, 0, 0) * 8;
+	//	return float4(bloom.rgb * bloom.rgb, bloom.a);					// 8-bit gamma2 (###ctchou $TODO)
 	return bloom;
 }
 
 
 float3 default_calc_blend(in float2 texcoord, in float4 combined, in float4 bloom)
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
 	return combined + bloom;
 #else // XENON
 //	return combined * bloom.a + bloom.rgb;
@@ -142,11 +140,11 @@ float3 default_calc_blend(in float2 texcoord, in float4 combined, in float4 bloo
 #endif // XENON
 }
 
- 
+
 void apply_color_adjustments(
 	inout float3 color)
 {
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 	// apply contrast (4 instructions)
 //	float luminance= dot(color, float3(0.333f, 0.333f, 0.333f));
 //	color *= pow(luminance,		gamma.w);								// (x^gamma)/x			==	pow(luminance, p_postprocess_contrast.x) / luminance == pow(luminance, p_postprocess_contrast.w)
@@ -161,7 +159,7 @@ void apply_color_adjustments(
 void convert_to_gamma2_and_apply_color_adjustments(
 	inout float3 color)
 {
-#ifndef pc
+#if !defined(pc) || (DX_VERSION == 11)
 	color.rgb=	pow(color.rgb,	gamma.z);								// sqrt(x^gamma)
 
 	// apply color matrix (3 instructions)
@@ -201,12 +199,12 @@ s_default_ps_output convert_output_gamma2(in float4 result, in float2 texcoord)	
 s_antialiased_ps_output convert_output_antialiased(in float4 result, in float2 texcoord)
 {
 	s_antialiased_ps_output output;
-	
+
     [branch]
     if (result.a < 1.0f)														// magically optimizing branch
     {
-       float4 prev=					tex2D(prev_sampler, texcoord);
-       
+       float4 prev=					sample2D(prev_sampler, texcoord);
+
        float min_velocity=			max(result.a, prev.a);
        float expected_velocity=		sqrt(min_velocity);							// if we write estimated velocity into the alpha channel, we can use them here
        float2 weights=				lerp(float2(0.5f, 0.5f), float2(0.0f, 1.0f), expected_velocity);
@@ -222,7 +220,7 @@ s_antialiased_ps_output convert_output_antialiased(in float4 result, in float2 t
        output.curframe_result=		float4(result.rgb, result.a);
        output.antialias_result=		float4(result.rgb, 1.0f);
     }
-    
+
     return output;
 }
 
@@ -233,22 +231,24 @@ float4 apply_noise( in float2 noise_space_texcoord, in float4 input_color )
 
 	float4 noise;
 
-	#ifdef pc
+	#if defined(pc) && (DX_VERSION == 9)
 		noise= float4( 0.8, 0.8, 0.0, 1.0 );
-	#else	// XENON		
-		asm    
-		{    
-			tfetch2D noise, 
-					 noise_space_texcoord, 
-					 noise_sampler, 
-					 MagFilter= point, 
-					 MinFilter= point, 
-					 MipFilter= point, 
-					 AnisoFilter= disabled, 
-					 OffsetX= 0.0f, 
-					 OffsetY= 0.0f    
+	#elif DX_VERSION == 11
+		noise= sample2D(noise_sampler, noise_space_texcoord);
+	#else	// XENON
+		asm
+		{
+			tfetch2D noise,
+					 noise_space_texcoord,
+					 noise_sampler,
+					 MagFilter= point,
+					 MinFilter= point,
+					 MipFilter= point,
+					 AnisoFilter= disabled,
+					 OffsetX= 0.0f,
+					 OffsetY= 0.0f
 		};
-	#endif	
+	#endif
 
 	noise.xy=			noise.zz * noise_params.xy + noise_params.zw;
 	output_color.rgb=	output_color.rgb * noise.xxx + noise.yyy;
@@ -258,7 +258,8 @@ float4 apply_noise( in float2 noise_space_texcoord, in float4 input_color )
 
 
 // non-antialiased
-s_default_ps_output default_ps(	in float2 texcoord			: TEXCOORD0, 
+s_default_ps_output default_ps(	SCREEN_POSITION_INPUT(screen_position),
+								in float2 texcoord			: TEXCOORD0,
 								in float4 xformed_texcoord	: TEXCOORD1		// xy - pixel-space texcoord, zw - noise-space texcoord
 							)
 {
@@ -274,8 +275,11 @@ s_default_ps_output default_ps(	in float2 texcoord			: TEXCOORD0,
 	result.a=			combined.a;
 
 	s_default_ps_output output= CONVERT_OUTPUT(result, texcoord);
-	
+
 	output.color = apply_noise( xformed_texcoord.zw, output.color );
+#if DX_VERSION == 11
+	output.color.a = /*sqrt*/(dot(output.color.rgb, float3(0.299, 0.587, 0.114)));
+#endif
 
 	return output;
 }
@@ -286,9 +290,11 @@ final_composite_screen_output shadow_apply_vs(vertex_type IN)
 {
 	return default_vs(IN);
 }
-s_antialiased_ps_output shadow_apply_ps(in float2 texcoord:			TEXCOORD0, 
-							   in float4 xformed_texcoord:  TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
-							   )
+s_antialiased_ps_output shadow_apply_ps(
+	SCREEN_POSITION_INPUT(screen_position),
+	in float2 texcoord:			TEXCOORD0,
+	in float4 xformed_texcoord:  TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
+)
 {
 	// final composite
 	float4 combined=	COMBINE(texcoord);											// sample and blend full resolution render targets
@@ -305,10 +311,10 @@ s_antialiased_ps_output shadow_apply_ps(in float2 texcoord:			TEXCOORD0,
 
 	s_antialiased_ps_output output;
 	output.antialias_result=	output.curframe_result=		temp.color;
-		
+
 	output.antialias_result = apply_noise( xformed_texcoord.zw, output.antialias_result );
 
-	return output;	
+	return output;
 }
 
 
@@ -317,9 +323,11 @@ final_composite_screen_output albedo_vs(vertex_type IN)
 {
 	return default_vs(IN);
 }
-s_antialiased_ps_output albedo_ps(in float2 texcoord:		   TEXCOORD0, 
-								  in float4 xformed_texcoord:  TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
-							     )
+s_antialiased_ps_output albedo_ps(
+	SCREEN_POSITION_INPUT(screen_position),
+	in float2 texcoord:		   TEXCOORD0,
+	in float4 xformed_texcoord:  TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
+	)
 {
 	// final composite
 	float4 combined=	COMBINE_AA(texcoord, true);									// sample and blend full resolution render targets
@@ -331,9 +339,9 @@ s_antialiased_ps_output albedo_ps(in float2 texcoord:		   TEXCOORD0,
 	float4 result;
 	result.rgb=			blend;				// apply_tone_curve(blend);
 	result.a=			combined.a;
-	
+
 	s_antialiased_ps_output output= CONVERT_OUTPUT_AA(result, texcoord);
-	
+
 	output.antialias_result = apply_noise( xformed_texcoord.zw, output.antialias_result );
 
 	return output;
@@ -345,9 +353,11 @@ final_composite_screen_output static_sh_vs(vertex_type IN)
 {
 	return default_vs(IN);
 }
-s_antialiased_ps_output static_sh_ps(in float2 texcoord:		 TEXCOORD0, 
-									 in float4 xformed_texcoord: TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
-							        )
+s_antialiased_ps_output static_sh_ps(
+	SCREEN_POSITION_INPUT(screen_position),
+	in float2 texcoord:		 TEXCOORD0,
+	in float4 xformed_texcoord: TEXCOORD1 // xy - pixel-space texcoord, zw - noise-space texcoord
+	)
 {
 	// final composite
 	float4 combined=	COMBINE_AA(texcoord, false);								// sample and blend full resolution render targets
@@ -363,6 +373,6 @@ s_antialiased_ps_output static_sh_ps(in float2 texcoord:		 TEXCOORD0,
     s_antialiased_ps_output output= CONVERT_OUTPUT_AA(result, texcoord);
 
 	output.antialias_result = apply_noise( xformed_texcoord.zw, output.antialias_result );
-		
+
 	return output;
 }

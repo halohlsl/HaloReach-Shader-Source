@@ -60,16 +60,16 @@ Material model parameters:
 */
 
 //parameters common to all material models
-float	diffuse_coefficient;						//how much to scale diffuse by
-float	specular_coefficient;						//how much to scale specular by
-float	area_specular_contribution;					//scale the area sh contribution
-float	analytical_specular_contribution;			//scale the analytical sh contribution
-float	environment_map_specular_contribution;		//scale the environment map contribution
-sampler material_texture;							//a texture that stores spatially varient parameters
-float4	material_texture_xform;						//texture matrix
-bool use_material_texture;
-float material_texture_black_roughness;
-float material_texture_black_specular_multiplier;
+PARAM(float,	diffuse_coefficient);						//how much to scale diffuse by
+PARAM(float,	specular_coefficient);						//how much to scale specular by
+PARAM(float,	area_specular_contribution);					//scale the area sh contribution
+PARAM(float,	analytical_specular_contribution);					//scale the analytical sh contribution
+PARAM(float,	environment_map_specular_contribution);			//scale the environment map contribution
+PARAM_SAMPLER_2D(material_texture);					//a texture that stores spatially varient parameters
+PARAM(float4,	material_texture_xform);				//texture matrix
+PARAM(bool, use_material_texture);
+PARAM(float, material_texture_black_roughness);
+PARAM(float, material_texture_black_specular_multiplier);
 
 #define order3_area_specular false
 

@@ -11,14 +11,14 @@
 
 void default_vs(
 	in vertex_type vertex,
-	out float4 position : POSITION)
+	out float4 position : SV_Position)
 {
     float4 local_to_world_transform[3];
 	deform(vertex, local_to_world_transform);
 	position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
 }
 
-float4 default_ps(in float4 position : TEXCOORD0) : COLOR
+float4 default_ps(in float4 position : TEXCOORD0) : SV_Target
 {
 	return float4(0.1f, 0.01f, 0.01f, 0.1f);
 }

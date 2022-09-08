@@ -2,21 +2,21 @@
 
 //#define USE_CUSTOM_POSTPROCESS_CONSTANTS
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
+#include "postprocess\apply_color_matrix_registers.fx"
+
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-PIXEL_CONSTANT( float4, dest_red,	POSTPROCESS_EXTRA_PIXEL_CONSTANT_0);
-PIXEL_CONSTANT( float4, dest_green, POSTPROCESS_EXTRA_PIXEL_CONSTANT_1);
-PIXEL_CONSTANT( float4, dest_blue,	POSTPROCESS_EXTRA_PIXEL_CONSTANT_2);
-PIXEL_CONSTANT( float4, dest_alpha, POSTPROCESS_EXTRA_PIXEL_CONSTANT_3);
+LOCAL_SAMPLER_2D(source_sampler, 0);
+
 
 // pixel fragment entry points
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
-	float4 color= tex2D(source_sampler, IN.texcoord);
+	float4 color= sample2D(source_sampler, IN.texcoord);
 
 	float4 dest_color;
 	dest_color.r= dot(dest_red.rgba,	color.rgba);

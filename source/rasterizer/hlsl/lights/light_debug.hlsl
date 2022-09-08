@@ -24,7 +24,7 @@
 // default for hard shadow
 void default_vs(
 	in vertex_type vertex,
-	out float4 screen_position : POSITION,
+	out float4 screen_position : SV_Position,
 	out float3 world_position : TEXCOORD0)
 {
     float4 local_to_world_transform[3];
@@ -34,15 +34,13 @@ void default_vs(
 }
 
 
-sampler2D unused_sampler : s10;
-
 float3 calc_normal_from_position(
 	in float3 fragment_position_world)
 {
 /*
 #ifndef pc
 	float4 gradient_horz, gradient_vert;
-	
+
 	// gradient_vert=	dx/dv, dy/dv, dx/dh, dy/dh
 	// gradient_horz=	dz/dh, dz/dv, dz/dh, dz/dv
 	asm {
@@ -63,17 +61,17 @@ float3 calc_normal_from_position(
 */
 	float3 dBPx= ddx(fragment_position_world);		// worldspace gradient along pixel x direction
 	float3 dBPy= ddy(fragment_position_world);		// worldspace gradient along pixel y direction
-	float3 bump_normal= -normalize( cross(dBPx, dBPy) );	
+	float3 bump_normal= -normalize( cross(dBPx, dBPy) );
 	return bump_normal;
 //#endif // PC
 }
 
 
 accum_pixel default_ps(
-	in float2 pixel_pos : VPOS,
+	SCREEN_POSITION_INPUT(pixel_pos),
 	in float3 world_position : TEXCOORD0)
 {
-#ifdef pc
+#if defined(pc) && (DX_VERSION == 9)
  	float3 color= float3(1.0f, 1.0f, 0.0f);
 #else
 
@@ -84,7 +82,7 @@ accum_pixel default_ps(
 #endif
 
 	color	=	LIGHT_COLOR * 0.6f + 0.4f * color;
-		
+
 	return convert_to_render_target(float4(color.rgb * g_exposure.rrr, 0.9f), false, true);
 }
 

@@ -5,6 +5,9 @@ Copyright (c) Microsoft Corporation, 2007. all rights reserved.
 	Synchanize constant register definition between cpp and fx
 */
 
+#if DX_VERSION == 9
+
+#include "water_registers.h"
 
 // GPU ranges
 // vs constants: 130 - 139
@@ -13,58 +16,131 @@ Copyright (c) Microsoft Corporation, 2007. all rights reserved.
 // samplers: 0 - 1
 
 /* water only*/
-VERTEX_CONSTANT(float4, k_vs_water_memexport_addr, 130)
-VERTEX_CONSTANT(float4, k_vs_water_index_offset, 131)
+VERTEX_CONSTANT(float4, k_water_memexport_addr, k_vs_water_memexport_addr)
+VERTEX_CONSTANT(float4, k_water_index_offset, k_vs_water_index_offset)
 
-PIXEL_CONSTANT(float4, k_ps_water_view_depth_constant, 217)
+PIXEL_CONSTANT(float4, k_water_view_depth_constant, k_ps_water_view_depth_constant)
 
-BOOL_CONSTANT(k_is_lightmap_exist, 100)
-BOOL_CONSTANT(k_is_water_interaction, 101)
-BOOL_CONSTANT(k_is_water_tessellated, 102)
-BOOL_CONSTANT(k_is_camera_underwater, 103)
+BOOL_CONSTANT(k_is_lightmap_exist, k_ps_water_is_lightmap_exist) // todo: was 100-103 previously, but there are only 16 of them [25/01/2013 paul.smirnov]
+BOOL_CONSTANT(k_is_water_interaction, k_ps_water_is_interaction)
+BOOL_CONSTANT(k_is_water_tessellated, k_ps_water_is_tessellated)
+BOOL_CONSTANT(k_is_camera_underwater, k_ps_water_is_underwater)
 
-SAMPLER_CONSTANT(tex_ripple_buffer_slope_height, 1)
+SAMPLER_CONSTANT(tex_ripple_buffer_slope_height, k_ps_water_tex_ripple_buffer_slope_height)
+#define vs_tex_ripple_buffer_slope_height tex_ripple_buffer_slope_height
 
 /* tesselletion only*/
-VERTEX_CONSTANT(float4, k_vs_tess_camera_position, 132)
-VERTEX_CONSTANT(float4, k_vs_tess_camera_forward, 133)
-VERTEX_CONSTANT(float4, k_vs_tess_camera_diagonal, 134)
+VERTEX_CONSTANT(float4, k_vs_tess_camera_position, k_vs_water_tess_camera_position)
+VERTEX_CONSTANT(float4, k_vs_tess_camera_forward, k_vs_water_tess_camera_forward)
+VERTEX_CONSTANT(float4, k_vs_tess_camera_diagonal, k_vs_water_tess_camera_diagonal)
 
 /* interaction only*/
-VERTEX_CONSTANT(float4, k_vs_ripple_memexport_addr, 130)
-VERTEX_CONSTANT(float, k_vs_ripple_pattern_count, 132)
-VERTEX_CONSTANT(float, k_vs_ripple_real_frametime_ratio, 133)
-VERTEX_CONSTANT(float, k_vs_ripple_particle_index_start, 138)
-VERTEX_CONSTANT(float, k_vs_maximum_ripple_particle_number, 139)
+VERTEX_CONSTANT(float4, k_vs_ripple_memexport_addr, k_vs_water_ripple_memexport_addr)
+VERTEX_CONSTANT(float, k_vs_ripple_pattern_count, k_vs_water_ripple_pattern_count)
+VERTEX_CONSTANT(float, k_vs_ripple_real_frametime_ratio, k_vs_water_ripple_real_frametime_ratio)
+VERTEX_CONSTANT(float, k_vs_ripple_particle_index_start, k_vs_water_ripple_particle_index_start)
+VERTEX_CONSTANT(float, k_vs_maximum_ripple_particle_number, k_vs_water_maximum_ripple_particle_number)
 
-BOOL_CONSTANT(k_is_under_screenshot, 104)
+#ifndef pc
+   BOOL_CONSTANT(k_is_under_screenshot, k_vs_water_is_under_screenshot)
+#endif
 
-SAMPLER_CONSTANT(tex_ripple_pattern, 0)
-SAMPLER_CONSTANT(tex_ripple_buffer_height, 1)
+SAMPLER_CONSTANT(tex_ripple_pattern, k_ps_water_tex_ripple_pattern)
+SAMPLER_CONSTANT(tex_ripple_buffer_height, k_ps_water_tex_ripple_buffer_height)
 
 /* underwater only */
-SAMPLER_CONSTANT(tex_ldr_buffer, 0)
-SAMPLER_CONSTANT(tex_depth_buffer, 1)
+SAMPLER_CONSTANT(tex_ldr_buffer, k_ps_water_tex_ldr_buffer)
+SAMPLER_CONSTANT(tex_depth_buffer, k_ps_water_tex_depth_buffer)
 
 /* ocean water only */
-VERTEX_CONSTANT(float, k_ocean_buffer_radius, 136)
-VERTEX_CONSTANT(float4, k_ocean_mesh_constants, 137)
-SAMPLER_CONSTANT(tex_ocean_mask, 2)
+VERTEX_CONSTANT(float, k_ocean_buffer_radius, k_vs_water_ocean_buffer_radius)
+VERTEX_CONSTANT(float4, k_ocean_mesh_constants, k_vs_water_ocean_mesh_constants)
+SAMPLER_CONSTANT(tex_ocean_mask, k_vs_water_tex_ocean_mask)
 
 /* share constants */
-VERTEX_CONSTANT(float3, k_vs_camera_position, 131)
-VERTEX_CONSTANT(float, k_ripple_buffer_radius, 133)
-VERTEX_CONSTANT(float2, k_view_dependent_buffer_center_shifting, 134)
-VERTEX_CONSTANT(float4, hidden_from_compiler, 135)
+VERTEX_CONSTANT(float3, k_vs_camera_position, k_vs_water_camera_position)
+VERTEX_CONSTANT(float, k_ripple_buffer_radius, k_vs_water_ripple_buffer_radius)
+VERTEX_CONSTANT(float2, k_view_dependent_buffer_center_shifting, k_vs_water_view_dependent_buffer_center_shifting)
+VERTEX_CONSTANT(float4, hidden_from_compiler, k_vs_water_hidden_from_compiler)
 
-PIXEL_CONSTANT(float4x4, k_ps_water_view_xform_inverse, 213)
-PIXEL_CONSTANT(float4, k_ps_water_player_view_constant, 218)
-PIXEL_CONSTANT(float4, k_ps_camera_position, 219)
-PIXEL_CONSTANT(float, k_ps_underwater_murkiness, 220)
-PIXEL_CONSTANT(float3, k_ps_underwater_fog_color, 221)
-PIXEL_CONSTANT(float4x4, k_ps_texcoord_to_world_matrix, 224)
+PIXEL_CONSTANT(float4x4, k_water_view_xform_inverse, k_ps_water_view_xform_inverse)
+PIXEL_CONSTANT(float4, k_water_player_view_constant, k_ps_water_player_view_constant)
+PIXEL_CONSTANT(float4, k_ps_camera_position, k_ps_water_camera_position)
+PIXEL_CONSTANT(float, k_ps_underwater_murkiness, k_ps_water_underwater_murkiness)
+PIXEL_CONSTANT(float3, k_ps_underwater_fog_color, k_ps_water_underwater_fog_color)
+PIXEL_CONSTANT(float4x4, k_ps_texcoord_to_world_matrix, k_ps_water_texcoord_to_world_matrix)
 
+#elif DX_VERSION == 11
 
+#include "water\ripple.fx"
 
+CBUFFER_BEGIN(WaterPS)
+	CBUFFER_CONST(WaterPS,					float4, 	k_water_view_depth_constant, 				k_ps_water_view_depth_constant)
+	CBUFFER_CONST(WaterPS,					bool,		k_is_lightmap_exist, 						k_ps_water_is_lightmap_exist)
+	CBUFFER_CONST(WaterPS,					bool,		k_is_water_interaction_ps, 					k_ps_water_is_interaction)
+	CBUFFER_CONST(WaterPS,					bool,		k_is_camera_underwater, 					k_ps_water_is_underwater)
+CBUFFER_END
 
+PIXEL_TEXTURE_AND_SAMPLER(_2D,	ps_tex_ripple_buffer_slope_height,		k_ps_water_tex_ripple_buffer_slope_height,		10)
+VERTEX_TEXTURE_AND_SAMPLER(_2D,	vs_tex_ripple_buffer_slope_height,	k_vs_water_tex_ripple_buffer_slope_height,		3)
 
+#ifdef VERTEX_SHADER
+#define tex_ripple_buffer_slope_height vs_tex_ripple_buffer_slope_height
+#else
+#define tex_ripple_buffer_slope_height ps_tex_ripple_buffer_slope_height
+#endif
+
+CBUFFER_BEGIN(WaterTessellationVS)
+	CBUFFER_CONST(WaterTessellationVS,		float4, 	k_vs_tess_camera_position,					k_vs_water_tess_camera_position)
+	CBUFFER_CONST(WaterTessellationVS,		float4, 	k_vs_tess_camera_forward,					k_vs_water_tess_camera_forward)
+	CBUFFER_CONST(WaterTessellationVS,		float4, 	k_vs_tess_camera_diagonal,					k_vs_water_tess_camera_diagonal)
+CBUFFER_END
+
+CBUFFER_BEGIN(WaterRippleApplyVS)
+	CBUFFER_CONST(WaterRippleApplyVS,		float3, 	k_vs_camera_position, 						k_vs_water_camera_position)
+	CBUFFER_CONST(WaterRippleApplyVS,		float, 		k_vs_camera_position_pad,					k_vs_water_camera_position_pad)
+	CBUFFER_CONST(WaterRippleApplyVS,		float, 		k_vs_ripple_pattern_count, 					k_vs_water_ripple_pattern_count)
+	CBUFFER_CONST(WaterRippleApplyVS,		float3, 	k_vs_ripple_pattern_count_pad, 				k_vs_water_ripple_pattern_count_pad)
+CBUFFER_END
+
+CBUFFER_BEGIN(WaterRippleUpdateVS)
+	CBUFFER_CONST(WaterRippleUpdateVS,		float, 		k_vs_ripple_real_frametime_ratio, 			k_vs_water_ripple_real_frametime_ratio)
+	CBUFFER_CONST(WaterRippleUpdateVS,		float3, 	k_vs_ripple_real_frametime_ratio_pad,		k_vs_water_ripple_real_frametime_ratio_pad)
+CBUFFER_END
+
+PIXEL_TEXTURE_AND_SAMPLER(_2D_ARRAY,	tex_ripple_pattern,			k_ps_water_tex_ripple_pattern,	 			0)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,			tex_ripple_buffer_height, 	k_ps_water_tex_ripple_buffer_height,		1)
+
+PIXEL_TEXTURE_AND_SAMPLER(_2D,			tex_ldr_buffer, 			k_ps_water_tex_ldr_buffer,					0)
+PIXEL_TEXTURE_AND_SAMPLER(_2D,			tex_depth_buffer, 			k_ps_water_tex_depth_buffer,				1)
+
+CBUFFER_BEGIN(WaterSharedVS)
+	CBUFFER_CONST(WaterSharedVS,			float, 		k_ripple_buffer_radius, 						k_vs_water_ripple_buffer_radius)
+	CBUFFER_CONST(WaterSharedVS,			float3, 	k_ripple_buffer_radius_pad,						k_vs_water_ripple_buffer_radius_pad)
+	CBUFFER_CONST(WaterSharedVS,			float2, 	k_view_dependent_buffer_center_shifting, 		k_vs_water_view_dependent_buffer_center_shifting)
+	CBUFFER_CONST(WaterSharedVS,			float2, 	k_view_dependent_buffer_center_shifting_pad,	k_view_dependent_buffer_center_shifting_pad)
+	CBUFFER_CONST(WaterSharedVS,			bool,		k_is_water_interaction, 						k_vs_water_is_interaction)
+	CBUFFER_CONST(WaterSharedVS,			bool,		k_is_water_tessellated, 						k_vs_water_is_tessellated)
+CBUFFER_END
+
+CBUFFER_BEGIN(WaterSharedPS)
+	CBUFFER_CONST(WaterSharedPS,			float4x4, 	k_water_view_xform_inverse, 				k_ps_water_view_xform_inverse)
+	CBUFFER_CONST(WaterSharedPS,			float4, 	k_water_player_view_constant, 				k_ps_water_player_view_constant)
+	CBUFFER_CONST(WaterSharedPS,			float4, 	k_ps_camera_position, 						k_ps_water_camera_position)
+	CBUFFER_CONST(WaterSharedPS,			float, 		k_ps_underwater_murkiness, 					k_ps_water_underwater_murkiness)
+	CBUFFER_CONST(WaterSharedPS,			float3,		k_ps_underwater_murkiness_pad, 				k_ps_water_underwater_murkiness_pad)
+	CBUFFER_CONST(WaterSharedPS,			float3, 	k_ps_underwater_fog_color, 					k_ps_water_underwater_fog_color)
+	CBUFFER_CONST(WaterSharedPS,			float, 		k_ps_underwater_fog_color_pad, 				k_ps_water_underwater_fog_color_pad)
+	CBUFFER_CONST(WaterSharedPS,			float4x4,	k_ps_texcoord_to_world_matrix,				k_ps_water_texcoord_to_world_matrix)
+CBUFFER_END
+
+CBUFFER_BEGIN(WaterRippleIndex)
+	CBUFFER_CONST(WaterRippleIndex,			uint2,		ripple_index_range,							k_ripple_index_range)
+CBUFFER_END
+
+#define CS_RIPPLE_UPDATE_THREADS 64
+
+RW_STRUCTURED_BUFFER(cs_ripple_buffer,		k_cs_ripple_buffer,		s_ripple,		0)
+STRUCTURED_BUFFER(vs_ripple_buffer,			k_vs_ripple_buffer,		s_ripple,		16)
+
+#endif

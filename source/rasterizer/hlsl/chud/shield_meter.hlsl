@@ -1,16 +1,13 @@
 //#line 2 "source\rasterizer\hlsl\copy_surface.hlsl"
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
+#include "chud\shield_meter_registers.fx"
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-
-PIXEL_CONSTANT(float4, flash_color,			POSTPROCESS_EXTRA_PIXEL_CONSTANT_0);
-PIXEL_CONSTANT(float4, gradient_min_color,	POSTPROCESS_EXTRA_PIXEL_CONSTANT_1);
-PIXEL_CONSTANT(float4, gradient_max_color,	POSTPROCESS_EXTRA_PIXEL_CONSTANT_2);
-PIXEL_CONSTANT(float4, misc_parameters,		POSTPROCESS_EXTRA_PIXEL_CONSTANT_3);
+LOCAL_SAMPLER_2D(source_sampler, 0);
 
 //float4 gradient_min_color; // get from HUD cuscolor2
 //float4 gradient_max_color; // get from HUD cuscolor3
@@ -19,12 +16,12 @@ PIXEL_CONSTANT(float4, misc_parameters,		POSTPROCESS_EXTRA_PIXEL_CONSTANT_3);
 //float flash_leading_edge_position; // get form HUD input2
 //float global_alpha; // get from HUD globalfade
 
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	float4 background_color= {0.0, 0, 0, 0};
 	float meter_brightness= 0.5;
 	float4 r0;
-	float4 t0= tex2D(source_sampler, IN.texcoord);
+	float4 t0= sample2D(source_sampler, IN.texcoord);
 	float flash_extension= misc_parameters.x;
 	float flash_leading_edge_position= misc_parameters.y;
 	float global_alpha= misc_parameters.z;
@@ -68,21 +65,21 @@ float4 default_ps(screen_output IN) : COLOR
 	float mux_test= r0.a>0.5 ? 1.0 : 0.0;
 	r0.a= mux_test*1.0 + (1.0 - mux_test)*meter_brightness;
 	r0.rgb= mux_test*background_color + (1.0-mux_test)*r0.rgb;
-	
+
 	//---
 	//C0a= $global_alpha
 	//R0a= INVERT(R0a)*C0a
 	//R0= R0*C0a
 	r0.a= (1.0 - r0.a)*global_alpha;
 	r0.rgb= r0.rgb*global_alpha;
-	
+
 	//---
 	//R0a= INVERT(R0a)
 	r0.a= 1.0f - r0.a;
 
 	//---
 	//SRCCOLOR= R0*T0a
-	//SRCALPHA= R0a	
+	//SRCALPHA= R0a
 	float result_alpha= t0.a*scale.w;
 	return float4(r0.r*t0.a, r0.g*t0.a, r0.b*t0.a, result_alpha);
 }

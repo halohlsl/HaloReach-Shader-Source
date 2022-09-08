@@ -12,6 +12,7 @@ Copyright (c) Microsoft Corporation, 2007. all rights reserved.
 #define _epsilon 0.00001f
 #define _1_minus_epsilon (1.0f - _epsilon)
 
+#if DX_VERSION == 9
 // Float has around 22 bits of accuracy.
 #define power_2_0	1
 #define power_2_1	(2 * power_2_0)
@@ -65,4 +66,7 @@ float extract_bits(float bitfield, int lo_power /*const power of 2*/, int hi_pow
 	}
 	return result;
 }
-
+#elif DX_VERSION == 11
+#define TEST_BIT(flags, bit) ((uint(flags) & (1<<bit)) != 0)
+#define EXTRACT_BITS(flags, lo_bit, hi_bit) float((uint(flags) >> lo_bit) & ((1 << (hi_bit - lo_bit))-1))
+#endif

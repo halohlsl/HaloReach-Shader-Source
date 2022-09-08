@@ -22,7 +22,7 @@
 // color output B= unused
 // color output C= unused
 // color output D= unused
-// 
+//
 // ---- SCALAR OUTPUTS
 // scalar output A= meter amount
 // scalar output B= meter max
@@ -57,13 +57,13 @@ chud_output default_vs(vertex_type IN)
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 #ifndef pc
 	asm{
 	tfetch2D bitmap_result, texcoord, basemap_sampler, MinFilter=linear, MagFilter=linear
 	};
 #else
-	bitmap_result= tex2D(basemap_sampler, texcoord);
+	bitmap_result= sample2D(basemap_sampler, texcoord);
 #endif
 
 	float tex_t_value= (texcoord.x - chud_texture_bounds.x)/(chud_texture_bounds.y - chud_texture_bounds.x);
@@ -88,7 +88,7 @@ float4 build_subpixel_result(float2 texcoord)
 	}
 	else
 	{
-		float gradient_t= (this_meter_value - gradient_min)/(gradient_max - gradient_min);
+		float gradient_t= (gradient_max != gradient_min) ? (this_meter_value - gradient_min)/(gradient_max - gradient_min) : 0;
 		gradient_t= max(0, gradient_t)*bitmap_result.b;
 
 		float gradient_amount= pow(gradient_t, 16.f);
@@ -109,18 +109,18 @@ float2 build_subsample_texcoord(float2 texcoord, float4 gradients, float dh, flo
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 #ifndef pc
 	float subsample_scale= 1.0/9.0;
 
 	float4 gradients;
 	float2 texcoord= IN.Texcoord;
-	
+
 	{
 		[isolate]		// ###ctchou $TODO this isolate is to work around a bug in the HLSL compiler crashing when it tries to optimize this instruction.   it should be fixed in future releases and we can remove this line
 		asm {
-			getGradients gradients, texcoord, basemap_sampler 
+			getGradients gradients, texcoord, basemap_sampler
 		};
 	}
 

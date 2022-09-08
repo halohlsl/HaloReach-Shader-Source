@@ -75,7 +75,7 @@ float4 build_subpixel_result_shared_xbox(float4 bitmap_result)
 
 float4 build_subpixel_result(float2 texcoord)
 {
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 	float bitmap_width= 400;
 	float chapter_edge_size= 1.25f; // pixels
 	float chapter_width= 0.1f; // of total
@@ -125,13 +125,13 @@ float4 meter_lookup(float2 texcoord)
 
 	return result;
 #else
-	float4 bitmap_result= tex2D(basemap_sampler, texcoord);
+	float4 bitmap_result= sample2D(basemap_sampler, texcoord);
 	return bitmap_result;
 #endif
 }
 
 // pixel fragment entry points
-accum_pixel default_ps(chud_output IN) : COLOR
+accum_pixel default_ps(chud_output IN) : SV_Target
 {
 #ifndef pc
 	float4 gradients;

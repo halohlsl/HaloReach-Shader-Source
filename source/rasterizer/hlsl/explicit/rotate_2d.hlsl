@@ -2,27 +2,29 @@
 
 //#define USE_CUSTOM_POSTPROCESS_CONSTANTS
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
+#include "explicit\rotate_2d_registers.fx"
+
 //@generate screen
 
-sampler2D source_sampler : register(s0);
-sampler2D background_sampler : register(s1);
-PIXEL_CONSTANT( float2, offset, POSTPROCESS_EXTRA_PIXEL_CONSTANT_0);
+LOCAL_SAMPLER_2D(source_sampler, 0);
+LOCAL_SAMPLER_2D(background_sampler, 1);
 
 // pixel fragment entry points
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	float2 rotated_texcoord;
 	rotated_texcoord.x= dot(scale.xy, IN.texcoord.xy) + offset.x;
 	rotated_texcoord.y= dot(scale.zw, IN.texcoord.xy) + offset.y;
-	
-	float4 source=		tex2D(source_sampler,			rotated_texcoord);
+
+	float4 source=		sample2D(source_sampler,			rotated_texcoord);
 
 	float4 background;
 #ifdef pc
-	background=	tex2D(background_sampler, IN.texcoord);
+	background=	sample2D(background_sampler, IN.texcoord);
 #else
 	background= tex2D_offset_point(background_sampler, IN.texcoord, 0.0f, 0.0f);
 #endif

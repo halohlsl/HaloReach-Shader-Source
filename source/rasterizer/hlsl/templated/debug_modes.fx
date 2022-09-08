@@ -16,7 +16,7 @@ Dec, 11, 2005 5:41pm (hao)
 //mode 7:	linear only
 //mode 8:	texture coord
 
-float frac(float src)
+float _frac(float src)
 {
 	return src- floor(src);
 }
@@ -43,9 +43,9 @@ float4 display_debug_modes(
 	else if (p_render_debug_mode.x< 2.0f)
 	{
 		float2 temp= floor(lightmap_texcoord * 1024.0f);
-		if (frac(temp.x/2.0f)== 0.0f)
+		if (_frac(temp.x/2.0f)== 0.0f)
 		{
-			if (frac(temp.y/2.0f)== 0.0f)
+			if (_frac(temp.y/2.0f)== 0.0f)
 			{
 				out_color= float4(1.0f, 0.7f, 0.3f, 0.0f);
 			}
@@ -56,7 +56,7 @@ float4 display_debug_modes(
 		}
 		else
 		{
-			if (frac(temp.y/2.0f)== 0.0f)
+			if (_frac(temp.y/2.0f)== 0.0f)
 			{
 				out_color= float4(1, 1, 1, 0.0f);
 			}

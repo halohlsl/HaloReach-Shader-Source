@@ -31,7 +31,7 @@
 #ifdef _xenon_tessellation_post_pass_vs
 	#define SCOPE_TESSELATION
 #else
-	#if defined(entry_point_lighting) && defined(BLEND_MODE_OFF) && defined(xenon) && !defined(NO_WETNESS_EFFECT)
+	#if defined(entry_point_lighting) && defined(BLEND_MODE_OFF) && (defined(xenon) || (DX_VERSION == 11)) && !defined(NO_WETNESS_EFFECT)
 		#define SCOPE_WETNESS
 		#define USE_PER_VERTEX_WETNESS_TEXTURE
 	#endif

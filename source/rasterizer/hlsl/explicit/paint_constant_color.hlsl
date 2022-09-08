@@ -2,6 +2,7 @@
 
 #define POSTPROCESS_USE_CUSTOM_VERTEX_SHADER
 
+#include "hlsl_constant_globals.fx"
 #include "hlsl_vertex_types.fx"
 #include "shared\utilities.fx"
 #include "postprocess\postprocess.fx"
@@ -17,7 +18,7 @@ screen_output default_vs(vertex_type IN)
 }
 
 // pixel fragment entry points
-float4 default_ps(screen_output IN) : COLOR
+float4 default_ps(screen_output IN) : SV_Target
 {
 	return scale.rgba;
 }

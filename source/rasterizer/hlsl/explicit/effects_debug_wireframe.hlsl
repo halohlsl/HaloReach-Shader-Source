@@ -4,23 +4,22 @@
 #include "hlsl_constant_globals.fx"
 #include "templated\deform.fx"
 #include "shared\utilities.fx"
+#include "explicit\effects_debug_wireframe_registers.fx"
 
 //@generate world
 
 //@entry default
 
-extern float4 debugColor: register(c58);
-
 void default_vs(
 	in vertex_type vertex,
-	out float4 position : POSITION)
+	out float4 position : SV_Position)
 {
     float4 local_to_world_transform[3];
 	deform(vertex, local_to_world_transform);
 	position= mul(float4(vertex.position.xyz, 1.0f), View_Projection);
 }
 
-float4 default_ps(in float2 texcoord : TEXCOORD0) : COLOR
+float4 default_ps(in float2 texcoord : TEXCOORD0) : SV_Target
 {
 	return debugColor;
 }
